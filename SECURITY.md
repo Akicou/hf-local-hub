@@ -91,6 +91,35 @@ We regularly update dependencies to address security issues. See:
 - Go: `server/go.mod`
 - Python: `python/pyproject.toml`
 
+## Managing Security Notifications
+
+### Disable Dependabot Email Alerts
+
+If you want to stop receiving email notifications for security vulnerabilities:
+
+1. Go to your repository on GitHub
+2. Click on **Settings** tab
+3. Click **Notifications** in the left sidebar
+4. Scroll to **Dependabot security alerts**
+5. Uncheck the box
+6. Click **Save**
+
+You can also configure this globally in your GitHub account settings:
+1. Click your profile picture → **Settings**
+2. Click **Notifications** in the left sidebar
+3. Scroll to **Dependabot security alerts**
+4. Customize your preferences
+
+### Automated Dependency Updates
+
+We use GitHub Dependabot to automatically create pull requests for dependency updates. Configuration is in `.github/dependabot.yml`:
+- Go modules: Weekly updates
+- Python packages: Weekly updates
+
+To disable automated updates:
+1. Go to **Settings** → **Code security and analysis**
+2. Disable **Dependabot version updates**
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
