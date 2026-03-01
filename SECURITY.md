@@ -4,6 +4,7 @@
 
 | Version | Supported |
 |---------|------------|
+| 0.2.x   | ✅ |
 | 0.1.x   | ✅ |
 | < 0.1.0  | ❌ |
 
@@ -66,9 +67,14 @@ We prioritize vulnerabilities based on:
 ## Known Security Considerations
 
 ### Authentication
-Current version does not implement authentication. All requests are public.
+hf-local-hub supports multiple authentication methods:
+- Token authentication (shared secret)
+- Hugging Face OAuth
+- LDAP
 
-**Recommendation**: Use firewall rules to restrict access.
+All methods use JWT tokens with 24-hour expiration.
+
+**Recommendation**: Use strong tokens and enable OAuth/LDAP for production.
 
 ### Encryption
 Files are stored in plain text. No encryption at rest.

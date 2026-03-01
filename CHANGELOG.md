@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-01
+
+### Added
+- Token authentication (shared secret)
+- Hugging Face OAuth authentication
+- LDAP authentication
+- JWT token-based session management
+- Login/logout CLI commands
+- .env file support
+- Web UI with auth integration
+
+### Changed
+- Makefile works from project root and server directory
+- Updated Python package to v0.2.0
+
 ## [0.1.0] - 2026-03-01
 
 ### Added
