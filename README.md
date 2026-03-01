@@ -237,7 +237,70 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - [x] Phase 2: Python Package & CLI
 - [x] Phase 3: Full HF Compatibility
 - [x] Phase 4: Packaging & Documentation
-- [ ] Phase 5: CI/CD & GitHub Readiness
+- [x] Phase 5: CI/CD & GitHub Readiness
+
+## Current Release
+
+**Version 0.1.0** - March 1, 2026
+
+### Installation
+
+```bash
+# From PyPI (after v0.1.0 release)
+pip install hf-local
+
+# Or install from source
+git clone https://github.com/Akicou/hf-local-hub.git
+cd hf-local-hub
+make server
+cd python && pip install -e .
+```
+
+### Quick Start
+
+```bash
+# Start server
+hf-local serve --port 8080
+
+# Set HF_ENDPOINT
+export HF_ENDPOINT=http://localhost:8080
+
+# Use with huggingface_hub
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('user/my-model')
+"
+```
+
+### What's Included
+
+- ✅ Go server with REST API (single binary)
+- ✅ Python CLI and library
+- ✅ Full Hugging Face Hub compatibility
+- ✅ Upload/download workflows
+- ✅ Transformers and Diffusers integration
+- ✅ Docker support
+- ✅ Comprehensive tests
+- ✅ Complete documentation
+
+### Documentation
+
+- [Usage Guide](docs/USAGE.md) - Complete usage instructions
+- [API Reference](docs/API.md) - REST API and Python client
+- [Examples](docs/examples/) - 4 working code examples
+- [Contributing](CONTRIBUTING.md) - Development guidelines
+- [Security](SECURITY.md) - Security policy
+
+### Source & Releases
+
+- **GitHub**: https://github.com/Akicou/hf-local-hub
+- **PyPI**: https://pypi.org/project/hf-local/
+- **Docker Hub**: Coming soon
+
+### Support
+
+- **Issues**: https://github.com/Akicou/hf-local-hub/issues
+- **Discussions**: https://github.com/Akicou/hf-local-hub/discussions
 
 ## Acknowledgments
 
