@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Namespace}}/{{.Name}} - HF Local Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #12151d;
+      --surface2:  #181c27;
+      --border:    #1e2436;
+      --border2:   #252c3e;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --muted2:    #475569;
+      --accent:    #FFD21E;
+      --accent-dim:#c9a500;
+      --green:     #34d399;
+      --blue:      #60a5fa;
+      --purple:    #a78bfa;
+      --red:       #f87171;
+      --radius:    10px;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --font-sans: 'Sora', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,15,20,0.85);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+      height: 56px;
+      display: flex; align-items: center;
+    }
+    .nav-inner {
+      width: 100%; max-width: 1400px; margin: 0 auto;
+      padding: 0 24px;
+      display: flex; align-items: center; gap: 24px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 15px;
+      color: var(--text); text-decoration: none;
+    }
+    .nav-logo svg { color: var(--accent); }
+
+    /* Main content */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Breadcrumb */
+    .breadcrumb {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px;
+      font-size: 13px; color: var(--muted);
+    }
+    .breadcrumb a { color: var(--muted); text-decoration: none; }
+    .breadcrumb a:hover { color: var(--text); }
+    .breadcrumb svg { width: 14px; height: 14px; }
+
+    /* Repo Header */
+    .repo-header {
+      margin-bottom: 24px;
+    }
+    .repo-title {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 12px;
+    }
+    .repo-title h1 {
+      font-size: 24px; font-weight: 600;
+    }
+    .repo-title .ns {
+      color: var(--muted); font-weight: 400;
+    }
+    .repo-title .name {
+      color: var(--text); font-weight: 600;
+    }
+    .visibility-badge {
+      padding: 3px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 11px; font-weight: 500;
+      color: var(--muted);
+    }
+    .type-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px; font-size: 12px; font-weight: 500;
+      border: 1px solid transparent;
+    }
+    .badge-model   { border-color: rgba(255,210,30,.3); color: var(--accent); background: rgba(255,210,30,.07); }
+    .badge-dataset { border-color: rgba(52,211,153,.3); color: var(--green); background: rgba(52,211,153,.07); }
+    .badge-space   { border-color: rgba(167,139,250,.3); color: var(--purple); background: rgba(167,139,250,.07); }
+
+    .repo-meta {
+      display: flex; align-items: center; gap: 16px;
+      color: var(--muted); font-size: 13px;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .tab {
+      padding: 12px 20px;
+      background: none;
+      border: none; border-bottom: 2px solid transparent;
+      color: var(--muted); font-size: 14px; font-weight: 500;
+      cursor: pointer; margin-bottom: -1px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-color: var(--accent); }
+
+    /* Tab content */
+    .tab-content { min-height: 400px; }
+
+    /* File Browser */
+    .file-browser {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .file-header {
+      display: grid; grid-template-columns: 2fr 100px 150px;
+      padding: 12px 20px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .file-row {
+      display: grid; grid-template-columns: 2fr 100px 150px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px; color: var(--text);
+      align-items: center;
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-row:hover { background: var(--surface2); }
+    .file-row svg {
+      width: 16px; height: 16px;
+      margin-right: 10px; color: var(--muted);
+      vertical-align: middle;
+    }
+    .file-row.folder svg { color: var(--accent-dim); }
+    .file-name {
+      display: flex; align-items: center;
+      overflow: hidden;
+    }
+    .file-name a {
+      color: var(--text); text-decoration: none;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .file-name a:hover { color: var(--accent); text-decoration: underline; }
+    .file-size, .file-date { color: var(--muted); font-size: 12px; }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center; padding: 80px 20px;
+    }
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .empty-state p { color: var(--muted); margin-bottom: 32px; }
+
+    /* Code blocks */
+    .code-block {
+      max-width: 700px; margin: 0 auto 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .code-header h4 { font-size: 13px; font-weight: 600; }
+    .btn-copy {
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--muted); font-size: 11px;
+      cursor: pointer;
+    }
+    .btn-copy:hover { color: var(--text); border-color: var(--muted); }
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono); font-size: 12px;
+      line-height: 1.6; color: var(--text);
+      background: var(--bg);
+    }
+    code { font-family: var(--font-mono); }
+
+    /* README */
+    .readme {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .readme h1, .readme h2, .readme h3 { margin-bottom: 16px; color: var(--text); }
+    .readme p { margin-bottom: 12px; color: var(--muted); line-height: 1.7; }
+    .readme pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 300;
+      padding: 12px 18px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      font-size: 13px; color: var(--text);
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      transform: translateY(12px); opacity: 0;
+      transition: all .2s;
+    }
+    .toast.show { transform: none; opacity: 1; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <a class="nav-logo" href="/ui/">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        HF Local Hub
+      </a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="breadcrumb">
+      <a href="/ui/">{{.RepoType}}s</a>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <span>{{.Namespace}}</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <span>{{.Name}}</span>
+    </div>
+
+    <div class="repo-header">
+      <div class="repo-title">
+        <h1>
+          <span class="ns">{{.Namespace}}/</span><span class="name">{{.Name}}</span>
+        </h1>
+        {{if .Private}}<span class="visibility-badge">Private</span>{{end}}
+      </div>
+      <div class="repo-meta">
+        <span class="type-badge badge-{{.RepoType}}">{{.RepoType}}</span>
+        <span>Created {{.CreatedAt}}</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="files">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Files and versions
+      </button>
+      <button class="tab" data-tab="community">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Community
+      </button>
+      <button class="tab" data-tab="settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </div>
+
+    <div class="tab-content" id="files-tab">
+      {{if .HasFiles}}
+      <div class="file-browser">
+        <div class="file-header">
+          <span>Name</span>
+          <span>Size</span>
+          <span>Last modified</span>
+        </div>
+        {{range .Files}}
+        <div class="file-row {{if .IsDir}}folder{{end}}">
+          <div class="file-name">
+            {{if .IsDir}}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>{{.Path}}</span>
+            {{else}}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <a href="/api/{{$.RepoType}}s/{{$.Namespace}}/{{$.Name}}/resolve/main/{{.Path}}">{{.Path}}</a>
+            {{end}}
+          </div>
+          <span class="file-size">{{if .IsDir}}—{{else}}{{.Size}}{{end}}</span>
+          <span class="file-date">{{.ModTime}}</span>
+        </div>
+        {{end}}
+      </div>
+      {{else}}
+      <div class="empty-state">
+        <div class="icon">📦</div>
+        <h3>This repository is empty</h3>
+        <p>Get started by uploading files using the Python library.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <h4>Upload a single file</h4>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from hf_local import HfApi
+
+api = HfApi(base_url="http://localhost:8080")
+api.upload_file(
+    path_or_fileobj="model.pth",
+    repo_id="{{.Namespace}}/{{.Name}}",
+    repo_type="{{.RepoType}}"
+)</code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-header">
+            <h4>Upload a folder</h4>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from hf_local import HfApi
+
+api = HfApi(base_url="http://localhost:8080")
+api.upload_folder(
+    folder_path="./my-{{.RepoType}}",
+    repo_id="{{.Namespace}}/{{.Name}}",
+    repo_type="{{.RepoType}}"
+)</code></pre>
+        </div>
+      </div>
+      {{end}}
+    </div>
+
+    <div class="tab-content" id="community-tab" style="display:none;">
+      <div class="empty-state">
+        <div class="icon">💬</div>
+        <h3>No discussions yet</h3>
+        <p>Community features coming soon.</p>
+      </div>
+    </div>
+
+    <div class="tab-content" id="settings-tab" style="display:none;">
+      <div class="empty-state">
+        <div class="icon">⚙️</div>
+        <h3>Settings</h3>
+        <p>Repository settings coming soon.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show';
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    function copyCode(btn) {
+      const code = btn.closest('.code-block').querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = 'Copied!';
+        showToast('Copied to clipboard');
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+        document.getElementById(tab.dataset.tab + '-tab').style.display = 'block';
+      });
+    });
+  </script>
+</body>
+</html>

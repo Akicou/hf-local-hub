@@ -125,3 +125,36 @@ func (s *Storage) GetRepoSize(repoType, namespace, name string) (int64, error) {
 	return size, err
 }
 
+type FileInfo struct {
+	Path     string `json:"path"`
+	Size     int64  `json:"size"`
+	IsDir    bool   `json:"is_dir"`
+	ModTime  int64  `json:"mod_time"`
+}
+
+func (s *Storage) ListFiles(repoType, namespace, name, revision string) ([]FileInfo, error) {
+	revisionPath := s.RevisionPath(repoType, namespace, name, revision)
+	if _, err := os.Stat(revisionPath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	var files []FileInfo
+	err := filepath.Walk(revisionPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		relPath, _ := filepath.Rel(revisionPath, path)
+		if relPath == "." {
+			return nil
+		}
+		files = append(files, FileInfo{
+			Path:    relPath,
+			Size:    info.Size(),
+			IsDir:   info.IsDir(),
+			ModTime: info.ModTime().Unix(),
+		})
+		return nil
+	})
+	return files, err
+}
+

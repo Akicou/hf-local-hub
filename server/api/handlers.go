@@ -1,14 +1,17 @@
 package api
 
 import (
-	"github.com/lyani/hf-local-hub/server/auth"
-	"github.com/lyani/hf-local-hub/server/config"
-	"github.com/lyani/hf-local-hub/server/db"
-	"github.com/lyani/hf-local-hub/server/storage"
+	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/Akicou/hf-local-hub/server/auth"
+	"github.com/Akicou/hf-local-hub/server/config"
+	"github.com/Akicou/hf-local-hub/server/db"
+	"github.com/Akicou/hf-local-hub/server/storage"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -191,6 +194,98 @@ func (s *Server) GetRepo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, repo)
+}
+
+func (s *Server) ListFiles(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+	files, err := s.storage.ListFiles(repo.Type, repo.Namespace, repo.Name, "main")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list files"})
+		return
+	}
+	if files == nil {
+		files = []storage.FileInfo{}
+	}
+	c.JSON(http.StatusOK, gin.H{"files": files, "count": len(files)})
+}
+
+func (s *Server) RepoPage(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.String(http.StatusNotFound, "Repository not found")
+		return
+	}
+
+	files, _ := s.storage.ListFiles(repo.Type, repo.Namespace, repo.Name, "main")
+
+	type FileView struct {
+		Path    string
+		Size    string
+		IsDir   bool
+		ModTime string
+	}
+
+	fileViews := []FileView{}
+	for _, f := range files {
+		sizeStr := "—"
+		if !f.IsDir {
+			sizeStr = formatBytes(f.Size)
+		}
+		modTime := time.Unix(f.ModTime, 0).Format("Jan 2, 2006")
+		fileViews = append(fileViews, FileView{
+			Path:    f.Path,
+			Size:    sizeStr,
+			IsDir:   f.IsDir,
+			ModTime: modTime,
+		})
+	}
+
+	tmpl, err := template.ParseFiles("ui/templates/detail.html")
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Template error: "+err.Error())
+		return
+	}
+
+	data := struct {
+		Namespace string
+		Name      string
+		RepoType  string
+		Private   bool
+		CreatedAt string
+		HasFiles  bool
+		Files     []FileView
+	}{
+		Namespace: repo.Namespace,
+		Name:      repo.Name,
+		RepoType:  repo.Type,
+		Private:   repo.Private,
+		CreatedAt: repo.CreatedAt.Format("Jan 2, 2006"),
+		HasFiles:  len(fileViews) > 0,
+		Files:     fileViews,
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	tmpl.Execute(c.Writer, data)
+}
+
+func formatBytes(b int64) string {
+	if b == 0 {
+		return "0 B"
+	}
+	sizes := []string{"B", "KB", "MB", "GB", "TB"}
+	i := 0
+	f := float64(b)
+	for f >= 1024 && i < len(sizes)-1 {
+		f /= 1024
+		i++
+	}
+	return fmt.Sprintf("%.1f %s", f, sizes[i])
 }
 
 func (s *Server) ResolveFile(c *gin.Context) {

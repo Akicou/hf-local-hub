@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/lyani/hf-local-hub/server/config"
-	"github.com/lyani/hf-local-hub/server/db"
-	"github.com/lyani/hf-local-hub/server/storage"
+	"github.com/Akicou/hf-local-hub/server/config"
+	"github.com/Akicou/hf-local-hub/server/db"
+	"github.com/Akicou/hf-local-hub/server/storage"
 )
 
 func TestMain(m *testing.M) {

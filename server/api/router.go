@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lyani/hf-local-hub/server/ui"
+	"github.com/Akicou/hf-local-hub/server/ui"
 )
 
 func (s *Server) SetupRouter() *gin.Engine {
@@ -54,6 +54,7 @@ func (s *Server) SetupRouter() *gin.Engine {
 		{
 			models.GET("/", s.ListModels)
 			models.GET("/:repo_id", s.GetRepo)
+			models.GET("/:repo_id/files", s.ListFiles)
 			models.POST("/:repo_id/upload", s.UploadFile)
 			models.POST("/:repo_id/preupload", s.Preupload)
 			models.POST("/:repo_id/commit", s.Commit)
@@ -66,6 +67,7 @@ func (s *Server) SetupRouter() *gin.Engine {
 		{
 			datasets.GET("/", s.ListDatasets)
 			datasets.GET("/:repo_id", s.GetRepo)
+			datasets.GET("/:repo_id/files", s.ListFiles)
 			datasets.POST("/:repo_id/upload", s.UploadFile)
 			datasets.POST("/:repo_id/commit", s.Commit)
 			datasets.GET("/:repo_id/resolve/:revision/*path", s.ResolveFile)

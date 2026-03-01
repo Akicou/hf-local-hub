@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/lyani/hf-local-hub/server/api"
-	"github.com/lyani/hf-local-hub/server/config"
-	"github.com/lyani/hf-local-hub/server/db"
-	"github.com/lyani/hf-local-hub/server/middleware"
+	"github.com/Akicou/hf-local-hub/server/api"
+	"github.com/Akicou/hf-local-hub/server/config"
+	"github.com/Akicou/hf-local-hub/server/db"
+	"github.com/Akicou/hf-local-hub/server/middleware"
 	"log"
 	"net/http"
 	"strconv"
