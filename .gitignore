@@ -6,6 +6,7 @@
 *.dylib
 hf-local
 hf-local.exe
+**/hf-local
 bin/
 
 # Go
