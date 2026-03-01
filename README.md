@@ -109,10 +109,10 @@ cd python
 pip install -e ".[dev]"
 ```
 
-### Install via pip (Future)
+### Install via pip
 
 ```bash
-pip install hf-local
+pip install hf-local-hub
 ```
 
 ## Documentation
@@ -246,8 +246,8 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ### Installation
 
 ```bash
-# From PyPI (after v0.1.0 release)
-pip install hf-local
+# From PyPI
+pip install hf-local-hub
 
 # Or install from source
 git clone https://github.com/Akicou/hf-local-hub.git
@@ -294,7 +294,7 @@ snapshot_download('user/my-model')
 ### Source & Releases
 
 - **GitHub**: https://github.com/Akicou/hf-local-hub
-- **PyPI**: https://pypi.org/project/hf-local/
+- **PyPI**: https://pypi.org/project/hf-local-hub/
 - **Docker Hub**: Coming soon
 
 ### Support
