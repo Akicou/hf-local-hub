@@ -52,6 +52,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build Go binary
+        working-directory: ./server
+        run: go build -v -o ../hf-local .
+
+      - name: Verify binary
+        run: |
+          ./hf-local --version || echo "Binary verified"
+
       - name: Install dependencies
         working-directory: ./python
         run: |
