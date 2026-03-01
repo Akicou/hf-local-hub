@@ -59,10 +59,15 @@ jobs:
 
       - name: Build Go binary
         working-directory: ./server
-        run: go build -v -o ../hf-local .
+        run: |
+          go build -v -o ../hf-local .
+          chmod +x ../hf-local
 
       - name: Verify binary
         run: |
+          pwd
+          ls -la hf-local
+          file hf-local
           ./hf-local --version || echo "Binary verified"
 
       - name: Install dependencies

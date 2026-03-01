@@ -7,6 +7,9 @@ import (
 func (s *Server) SetupRouter() *gin.Engine {
 	r := gin.Default()
 
+	// Add panic recovery to prevent raw HTML error pages
+	r.Use(gin.Recovery())
+
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

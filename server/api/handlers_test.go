@@ -25,7 +25,8 @@ func TestMain(m *testing.M) {
 }
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	dbConn, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	// Create unique database for each test to avoid interference
+	dbConn, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_fk=1"), &gorm.Config{})
 	require.NoError(t, err)
 
 	dbConn.AutoMigrate(&db.Repo{}, &db.Commit{}, &db.FileIndex{})
@@ -110,6 +111,9 @@ func TestListModels(t *testing.T) {
 	dbConn := setupTestDB(t)
 	router := setupTestRouter(dbConn)
 
+	// Clean up any existing data
+	dbConn.Exec("DELETE FROM repos")
+
 	// Create test repos
 	dbConn.Create(&db.Repo{RepoID: "user/repo1", Namespace: "user", Name: "repo1", Type: "model"})
 	dbConn.Create(&db.Repo{RepoID: "user/repo2", Namespace: "user", Name: "repo2", Type: "model"})
@@ -130,6 +134,9 @@ func TestListModels(t *testing.T) {
 func TestGetRepo(t *testing.T) {
 	dbConn := setupTestDB(t)
 	router := setupTestRouter(dbConn)
+
+	// Clean up any existing data
+	dbConn.Exec("DELETE FROM repos")
 
 	// Create test repo
 	dbConn.Create(&db.Repo{RepoID: "user/specific-repo", Namespace: "user", Name: "specific-repo", Type: "model"})
@@ -162,8 +169,11 @@ func TestLFSInfo(t *testing.T) {
 	dbConn := setupTestDB(t)
 	router := setupTestRouter(dbConn)
 
+	// Clean up any existing data
+	dbConn.Exec("DELETE FROM repos")
+
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/user/test-model/info/lfs", nil)
+	req, _ := http.NewRequest("GET", "/api/models/user/test-model/info/lfs", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
