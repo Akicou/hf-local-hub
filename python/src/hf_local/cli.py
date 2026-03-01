@@ -43,7 +43,7 @@ def is_server_running(endpoint: str = "http://localhost:8080") -> bool:
     try:
         response = httpx.get(f"{endpoint}/health", timeout=1.0)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 
