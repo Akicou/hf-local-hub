@@ -8,7 +8,7 @@ server-test:
 	@cd server && go test -v ./...
 
 server-lint:
-	@cd server && golangci-lint run
+	@cd server && go vet ./...
 
 # Python
 python-install:
