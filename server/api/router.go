@@ -28,6 +28,9 @@ func (s *Server) SetupRouter() *gin.Engine {
 		api.GET("/models/:repo_id", s.GetRepo)
 		api.POST("/models/:repo_id/preupload", s.Preupload)
 		api.POST("/models/:repo_id/commit", s.Commit)
+		api.GET("/models/:repo_id/resolve/:revision/*path", s.ResolveFile)
+		api.GET("/models/:repo_id/raw/:revision/*path", s.ResolveFile)
+		api.GET("/models/:repo_id/info/lfs", s.LFSInfo)
 	}
 
 	r.GET("/:repo_id/resolve/:revision/*path", s.ResolveFile)

@@ -168,3 +168,11 @@ func (s *Server) Commit(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, commit)
 }
+
+func (s *Server) LFSInfo(c *gin.Context) {
+	// LFS stub: always return that files are regular (not LFS)
+	c.JSON(http.StatusOK, gin.H{
+		"lfs": false,
+		"size": 0,
+	})
+}
