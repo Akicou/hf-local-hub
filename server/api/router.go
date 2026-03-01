@@ -30,14 +30,17 @@ func (s *Server) SetupRouter() *gin.Engine {
 		c.Redirect(http.StatusMovedPermanently, "/ui/")
 	})
 
+	// HTML pages - must be BEFORE catch-all routes
+	r.GET("/r/*repo_id", s.RepoPage)
+
 	api := r.Group("/api")
 	{
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", s.TokenLogin)
-		auth.GET("/hf/login", s.HFLogin)
-		auth.GET("/hf/callback", s.HFCallback)
-		auth.POST("/ldap/login", s.LDAPLogin)
+			auth.GET("/hf/login", s.HFLogin)
+			auth.GET("/hf/callback", s.HFCallback)
+			auth.POST("/ldap/login", s.LDAPLogin)
 		}
 
 		repos := api.Group("/repos")
@@ -76,9 +79,6 @@ func (s *Server) SetupRouter() *gin.Engine {
 	}
 
 	r.GET("/:repo_id/resolve/:revision/*path", s.ResolveFile)
-
-	// HTML pages - use wildcard to capture repo_id with slashes
-	r.GET("/r/*repo_id", s.RepoPage)
 
 	return r
 }
