@@ -99,7 +99,7 @@ make docker-run
 ## Project Status
 
 - [x] Phase 0: Project Initialization
-- [ ] Phase 1: Go Server Core
+- [x] Phase 1: Go Server Core
 - [ ] Phase 2: Python Package & CLI
 - [ ] Phase 3: Full HF Compatibility
 - [ ] Phase 4: Packaging & Documentation
