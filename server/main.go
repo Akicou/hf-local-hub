@@ -19,7 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer logger.Sync()
+	_ = logger.Sync()
 
 	if cfg.LogLevel == "debug" {
 		logger, err = zap.NewDevelopment()

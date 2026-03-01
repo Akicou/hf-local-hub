@@ -1,21 +1,20 @@
 """Tests for Transformers integration with hf-local."""
 
-import os
+import pytest
 from pathlib import Path
 
-import pytest
-
 try:
+    # ruff: noqa: F401
     from transformers import AutoModel, AutoTokenizer
     HAS_TRANSFORMERS = True
 except ImportError:
     HAS_TRANSFORMERS = False
 
-from hf_local import serve_background, set_endpoint, upload_folder
+from hf_local import serve_background, set_endpoint
 
 
 @pytest.mark.skipif(not HAS_TRANSFORMERS, reason="transformers not installed")
-def test_transformers_auto_model(temp_data_dir):
+def test_transformers_auto_model(temp_data_dir: Path) -> None:
     """Test loading model with AutoModel."""
     endpoint = "http://localhost:8086"
 
@@ -28,7 +27,7 @@ def test_transformers_auto_model(temp_data_dir):
 
 
 @pytest.mark.skipif(not HAS_TRANSFORMERS, reason="transformers not installed")
-def test_transformers_auto_tokenizer(temp_data_dir):
+def test_transformers_auto_tokenizer(temp_data_dir: Path) -> None:
     """Test loading tokenizer with AutoTokenizer."""
     endpoint = "http://localhost:8087"
 
@@ -40,7 +39,7 @@ def test_transformers_auto_tokenizer(temp_data_dir):
 
 
 @pytest.fixture
-def temp_data_dir(tmp_path):
+def temp_data_dir(tmp_path: Path) -> Path:
     """Create temporary data directory."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()

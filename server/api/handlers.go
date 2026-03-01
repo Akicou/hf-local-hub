@@ -71,6 +71,8 @@ func (s *Server) CreateRepo(c *gin.Context) {
 
 	if err := s.storage.EnsureDir(s.storage.RepoPath(req.Type, req.Namespace, req.Name)); err != nil {
 		s.logger.Error("failed to create repo directory", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory"})
+		return
 	}
 
 	c.JSON(http.StatusCreated, repo)
@@ -163,7 +165,9 @@ func (s *Server) Commit(c *gin.Context) {
 			Size:     f.Size,
 			LFS:      f.LFS,
 		}
-		s.db.Create(&fileIndex)
+		if err := s.db.Create(&fileIndex).Error; err != nil {
+			s.logger.Error("failed to create file index", zap.Error(err))
+		}
 	}
 
 	c.JSON(http.StatusCreated, commit)
