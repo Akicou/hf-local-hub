@@ -29,7 +29,7 @@ class App {
   }
 
   bindNav() {
-    document.querySelectorAll('.nav-tab').forEach(btn => {
+    document.querySelectorAll('.nav-link[data-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
     });
     document.getElementById('loginBtn').addEventListener('click', () =>
@@ -72,7 +72,7 @@ class App {
 
   switchTab(tab) {
     this.currentTab = tab;
-    document.querySelectorAll('.nav-tab').forEach(btn =>
+    document.querySelectorAll('.nav-link[data-tab]').forEach(btn =>
       btn.classList.toggle('active', btn.dataset.tab === tab)
     );
     document.getElementById('pageTitle').textContent =
