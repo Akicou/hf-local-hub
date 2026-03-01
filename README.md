@@ -101,7 +101,7 @@ make docker-run
 - [x] Phase 0: Project Initialization
 - [x] Phase 1: Go Server Core
 - [x] Phase 2: Python Package & CLI
-- [ ] Phase 3: Full HF Compatibility
+- [x] Phase 3: Full HF Compatibility
 - [ ] Phase 4: Packaging & Documentation
 - [ ] Phase 5: CI/CD & GitHub Readiness
 
