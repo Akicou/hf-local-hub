@@ -5,7 +5,7 @@ import (
 	"io/fs"
 )
 
-//go:embed dist
+//go:embed dist templates
 var files embed.FS
 
 func FS() fs.FS {

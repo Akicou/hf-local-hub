@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/Akicou/hf-local-hub/server/config"
 	"github.com/Akicou/hf-local-hub/server/db"
 	"github.com/Akicou/hf-local-hub/server/storage"
+	"github.com/Akicou/hf-local-hub/server/ui"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -250,7 +252,20 @@ func (s *Server) RepoPage(c *gin.Context) {
 		})
 	}
 
-	tmpl, err := template.ParseFiles("ui/templates/detail.html")
+	tmplContent, err := ui.FS().Open("templates/detail.html")
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Template not found: "+err.Error())
+		return
+	}
+	defer tmplContent.Close()
+
+	tmplBytes, err := io.ReadAll(tmplContent)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to read template: "+err.Error())
+		return
+	}
+
+	tmpl, err := template.New("detail").Parse(string(tmplBytes))
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Template error: "+err.Error())
 		return
