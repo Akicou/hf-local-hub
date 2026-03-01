@@ -3,9 +3,62 @@ package config
 import (
 	"flag"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// loadEnvFile reads .env file and sets environment variables
+func loadEnvFile() {
+	// Get current executable directory for locating .env
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+
+	// Try .env in various locations
+	paths := []string{
+		".env",
+		filepath.Join(exeDir, ".env"),
+		filepath.Join(exeDir, "..", ".env"),
+		filepath.Join(exeDir, "..", "..", ".env"),
+		filepath.Join(exeDir, "..", "..", "..", ".env"),
+	}
+
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		// Parse and set each line
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			// Skip comments and empty lines
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			// Find the first = sign
+			if idx := strings.Index(line, "="); idx > 0 {
+				key := strings.TrimSpace(line[:idx])
+				value := strings.TrimSpace(line[idx+1:])
+
+				// Remove surrounding quotes
+				value = strings.Trim(value, `"'`)
+
+				// Only set if not already set
+				if _, exists := os.LookupEnv(key); !exists {
+					os.Setenv(key, value)
+				}
+			}
+		}
+		break // Only load first found .env
+	}
+}
+
+func init() {
+	loadEnvFile()
+}
 
 type AuthConfig struct {
 	JWTSecret      string

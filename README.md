@@ -259,6 +259,8 @@ The server supports two middleware levels:
 
 ### Environment Variables Reference
 
+You can also use a `.env` file in the project root or server directory. The server will automatically load it.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `HF_LOCAL_TOKEN` | Shared secret for token auth | `my-secret-key` |
