@@ -292,7 +292,10 @@ func (s *Server) RepoPage(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	tmpl.Execute(c.Writer, data)
+	if err := tmpl.Execute(c.Writer, data); err != nil {
+		c.String(500, "Template error: "+err.Error())
+		return
+	}
 }
 
 func formatBytes(b int64) string {

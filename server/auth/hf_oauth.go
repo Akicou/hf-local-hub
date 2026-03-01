@@ -3,7 +3,9 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
@@ -79,6 +81,8 @@ func (p *HFProvider) getUserInfo(accessToken string) (map[string]interface{}, er
 
 func generateState() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "fallback-state-" + fmt.Sprint(time.Now().Unix())
+	}
 	return base64.URLEncoding.EncodeToString(b)
 }

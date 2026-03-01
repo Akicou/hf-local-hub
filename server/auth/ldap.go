@@ -27,7 +27,7 @@ func NewLDAPProvider(server string, port int, bindDN, bindPass, baseDN, filter s
 }
 
 func (p *LDAPProvider) Authenticate(username, password string) (string, error) {
-	conn, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", p.server, p.port))
+	conn, err := ldap.DialURL(fmt.Sprintf("ldap://%s:%d", p.server, p.port))
 	if err != nil {
 		return "", fmt.Errorf("failed to connect: %w", err)
 	}
@@ -69,16 +69,11 @@ func (p *LDAPProvider) Authenticate(username, password string) (string, error) {
 		userID = username
 	}
 
-	displayName := searchResult.Entries[0].GetAttributeValue("cn")
-	if displayName == "" {
-		displayName = username
-	}
-
 	return userID, nil
 }
 
 func (p *LDAPProvider) GetUserAttributes(username string) (map[string]string, error) {
-	conn, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", p.server, p.port))
+	conn, err := ldap.DialURL(fmt.Sprintf("ldap://%s:%d", p.server, p.port))
 	if err != nil {
 		return nil, err
 	}
