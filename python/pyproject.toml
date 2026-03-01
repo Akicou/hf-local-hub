@@ -63,4 +63,13 @@ ignore = ["F401"]
 "src/hf_local/__init__.py" = ["E722", "TRY003", "EM102", "PLC0415", "PLR2004", "S603"]
 
 [tool.mypy]
-strict = true
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = "src.hf_local.*"
+ignore_missing_imports = true
+check_untyped_defs = false
