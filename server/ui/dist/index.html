@@ -380,6 +380,132 @@
     .toast.show { transform: none; opacity: 1; }
     .toast.error { border-color: rgba(248,113,113,.4); color: var(--red); }
     .toast.success { border-color: rgba(52,211,153,.4); color: var(--green); }
+
+    /* ── REPO DETAIL ── */
+    .repo-detail {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      min-height: calc(100vh - 80px);
+    }
+    .detail-header {
+      margin-bottom: 20px;
+    }
+    .btn-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer; margin-bottom: 16px;
+    }
+    .btn-back:hover { color: var(--text); background: var(--surface2); }
+    .detail-title {
+      font-size: 22px; font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .detail-ns { color: var(--muted); font-weight: 400; }
+    .detail-private {
+      display: inline-flex;
+      padding: 2px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 11px; color: var(--muted);
+      margin-left: 8px; vertical-align: middle;
+    }
+    .detail-meta {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); font-size: 13px;
+    }
+    .detail-tabs {
+      display: flex; gap: 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .detail-tab {
+      padding: 10px 16px;
+      background: none;
+      border: none; border-bottom: 2px solid transparent;
+      color: var(--muted); font-size: 14px;
+      cursor: pointer; margin-bottom: -1px;
+    }
+    .detail-tab:hover { color: var(--text); }
+    .detail-tab.active { color: var(--accent); border-color: var(--accent); }
+    .detail-content { min-height: 300px; }
+
+    /* File browser */
+    .file-browser {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .file-header {
+      display: grid; grid-template-columns: 2fr 100px 120px;
+      padding: 10px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px; color: var(--muted);
+      font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .file-row {
+      display: grid; grid-template-columns: 2fr 100px 120px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px; color: var(--text);
+      align-items: center;
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-row:hover { background: var(--surface2); }
+    .file-row svg { margin-right: 8px; color: var(--muted); }
+    .file-row.folder svg { color: var(--accent-dim); }
+    .file-path-col { display: flex; align-items: center; }
+    .file-size-col, .file-date-col { color: var(--muted); font-size: 12px; }
+
+    /* Empty repo */
+    .empty-repo {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-repo h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .empty-repo p { color: var(--muted); margin-bottom: 32px; }
+    .upload-help {
+      max-width: 600px; margin: 0 auto 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px; text-align: left;
+    }
+    .upload-help h4 {
+      font-size: 13px; font-weight: 600;
+      margin-bottom: 12px; color: var(--text);
+    }
+    .upload-help pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: var(--font-mono); font-size: 12px;
+      overflow-x: auto; color: var(--muted);
+      margin: 0 0 12px; line-height: 1.5;
+    }
+    .btn-copy {
+      padding: 6px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text); font-size: 12px;
+      cursor: pointer; float: right;
+    }
+    .btn-copy:hover { background: var(--border); }
+    .empty-tab {
+      text-align: center; padding: 80px 20px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>

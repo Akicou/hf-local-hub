@@ -43,7 +43,6 @@ class App {
       pill.addEventListener('click', () => {
         const { filter, value } = pill.dataset;
         this.filters[filter] = value;
-        // update active state within same filter group
         document.querySelectorAll(`.filter-pill[data-filter="${filter}"]`).forEach(p =>
           p.classList.toggle('active', p === pill)
         );
@@ -122,9 +121,6 @@ class App {
       return;
     }
     container.innerHTML = list.map(r => this.cardHTML(r)).join('');
-    container.querySelectorAll('.repo-card').forEach((card, i) => {
-      card.addEventListener('click', () => this.showRepoDetail(list[i]));
-    });
   }
 
   cardHTML(r) {
@@ -135,8 +131,9 @@ class App {
     const date = r.created_at
       ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
+    const repoId = r.repo_id || `${r.namespace}/${r.name}`;
     return `
-      <div class="repo-card">
+      <a href="/r/${repoId}" class="repo-card" style="text-decoration:none;color:inherit">
         <div class="repo-card-top">
           <div class="repo-icon ${iconClass[t] || 'icon-model'}">${icons[t] || '🤖'}</div>
           <div class="repo-card-meta">
@@ -148,60 +145,7 @@ class App {
           ${r.private ? '<span class="type-badge" style="border-color:rgba(100,116,139,.3);color:var(--muted)">private</span>' : ''}
           <span class="repo-date">${date}</span>
         </div>
-      </div>`;
-  }
-
-  async showRepoDetail(r) {
-    const type = r.type || 'model';
-    const endpoint = `/api/${type}s/${r.repo_id}`;
-    let detail = r;
-    try {
-      const res = await fetch(endpoint);
-      if (res.ok) detail = await res.json();
-    } catch {}
-
-    const overlay = document.getElementById('repoModal');
-    const modal = overlay.querySelector('.modal');
-    modal.querySelector('.modal-head h2').textContent = `${detail.namespace}/${detail.name}`;
-    modal.querySelector('form').innerHTML = `
-      <div class="form-group">
-        <label>Repo ID</label>
-        <input readonly value="${this.esc(detail.repo_id || detail.namespace+'/'+detail.name)}">
-      </div>
-      <div class="form-group">
-        <label>Type</label>
-        <input readonly value="${this.esc(type)}">
-      </div>
-      <div class="form-group">
-        <label>Visibility</label>
-        <input readonly value="${detail.private ? 'Private' : 'Public'}">
-      </div>
-      <div class="form-group">
-        <label>Created</label>
-        <input readonly value="${detail.created_at ? new Date(detail.created_at).toLocaleString() : '—'}">
-      </div>`;
-    modal.querySelector('.modal-head h2').textContent = `${this.esc(detail.namespace)}/${this.esc(detail.name)}`;
-    const actions = modal.querySelector('.modal-actions');
-    actions.innerHTML = `<button class="btn-cancel" style="grid-column:1/-1" id="modalCancel">Close</button>`;
-    document.getElementById('modalCancel').addEventListener('click', () => {
-      overlay.classList.remove('show');
-      this._resetModal();
-    });
-    overlay.classList.add('show');
-  }
-
-  _resetModal() {
-    const modal = document.getElementById('repoModal').querySelector('.modal');
-    modal.querySelector('.modal-head h2').textContent = 'Create Repository';
-    modal.querySelector('form').innerHTML = `
-      <div class="form-group"><label>Repository Name</label><input type="text" name="name" required placeholder="my-awesome-model"></div>
-      <div class="form-group"><label>Namespace</label><input type="text" name="namespace" required placeholder="username-or-org"></div>
-      <div class="form-group"><label>Type</label><select name="type"><option value="model">Model</option><option value="dataset">Dataset</option><option value="space">Space</option></select></div>
-      <div class="form-check"><input type="checkbox" name="private" id="private"><label for="private">Private repository</label></div>`;
-    modal.querySelector('.modal-actions').innerHTML = `
-      <button class="btn-cancel" id="modalCancel">Cancel</button>
-      <button class="btn-submit" id="modalSubmit">Create</button>`;
-    this.bindModal();
+      </a>`;
   }
 
   esc(s) {
@@ -209,7 +153,6 @@ class App {
   }
 
   showModal() {
-    this._resetModal();
     document.getElementById('repoModal').classList.add('show');
   }
 
@@ -247,12 +190,10 @@ class App {
   }
 
   async login() {
-    // If HF OAuth is enabled, redirect to OAuth
     if (this.authMethods.hf) {
       window.location.href = '/api/auth/hf/login';
       return;
     }
-    // Otherwise use token auth
     const token = prompt('Enter your authentication token:');
     if (!token) return;
     try {
