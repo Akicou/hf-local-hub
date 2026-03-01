@@ -47,10 +47,18 @@ func setupTestRouter(database *gorm.DB) *gin.Engine {
 	}
 
 	router.GET("/health", s.Health)
-	router.POST("/api/repos/create", s.CreateRepo)
-	router.GET("/api/models", s.ListModels)
-	router.GET("/api/models/:repo_id", s.GetRepo)
-	router.GET("/api/:repo_id/info/lfs", s.LFSInfo)
+
+	api := router.Group("/api")
+	{
+		api.POST("/repos/create", s.CreateRepo)
+		api.GET("/models", s.ListModels)
+		api.GET("/models/:repo_id", s.GetRepo)
+		api.POST("/models/:repo_id/preupload", s.Preupload)
+		api.POST("/models/:repo_id/commit", s.Commit)
+		api.GET("/models/:repo_id/resolve/:revision/*path", s.ResolveFile)
+		api.GET("/models/:repo_id/raw/:revision/*path", s.ResolveFile)
+		api.GET("/models/:repo_id/info/lfs", s.LFSInfo)
+	}
 
 	return router
 }

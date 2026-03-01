@@ -5,20 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "hf-local"
 description = "Lightweight local Hugging Face Hub server and client"
-readme = "README.md"
+readme = "../README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "hf-local-hub", email = "maintainer@hf-local-hub.com" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["huggingface", "huggingface-hub", "local", "server"]
+keywords = ["huggingface", "huggingface-hub", "local", "server", "ml", "ai"]
 dependencies = [
     "huggingface-hub>=0.25.0",
     "typer>=0.12.0",
@@ -26,6 +30,12 @@ dependencies = [
     "rich>=13.7.0",
 ]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/lyani/hf-local-hub"
+Documentation = "https://github.com/lyani/hf-local-hub#readme"
+Repository = "https://github.com/lyani/hf-local-hub"
+Issues = "https://github.com/lyani/hf-local-hub/issues"
 
 [project.optional-dependencies]
 serve = ["hatchling"]
