@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build Go binaries
+        working-directory: ./server
+        run: |
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o hf-local-linux-amd64 .
+          # macOS
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o hf-local-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o hf-local-darwin-arm64 .
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o hf-local-windows-amd64.exe .
+
+      - name: Build Python package
+        working-directory: ./python
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "## Changes in $VERSION" > CHANGELOG.md
+          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> CHANGELOG.md
+          cat CHANGELOG.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: ./CHANGELOG.md
+          files: |
+            server/hf-local-linux-amd64
+            server/hf-local-darwin-amd64
+            server/hf-local-darwin-arm64
+            server/hf-local-windows-amd64.exe
+            python/dist/*.whl
+            python/dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        working-directory: ./python
+        run: |
+          python -m pip install --upgrade twine
+          twine upload dist/*
