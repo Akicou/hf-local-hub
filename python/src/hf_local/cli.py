@@ -50,8 +50,18 @@ def is_server_running(endpoint: str = "http://localhost:8080") -> bool:
 @app.command()
 def serve(
     port: int = typer.Option(8080, "--port", "-p", help="Server port"),
-    data_dir: str = typer.Option("./data", "--data-dir", "-d", help="Data storage directory"),
-    log_level: str = typer.Option("info", "--log-level", "-l", help="Log level (debug, info, warn, error)"),
+    data_dir: str = typer.Option(
+        "./data",
+        "--data-dir",
+        "-d",
+        help="Data storage directory",
+    ),
+    log_level: str = typer.Option(
+        "info",
+        "--log-level",
+        "-l",
+        help="Log level (debug, info, warn, error)",
+    ),
 ):
     """Start the hf-local server."""
     endpoint = f"http://localhost:{port}"
@@ -93,7 +103,12 @@ def serve(
 def upload(
     local_path: str = typer.Argument(..., help="Local file or directory path"),
     repo_id: str = typer.Argument(..., help="Repository ID (e.g., 'user/model')"),
-    endpoint: str = typer.Option("http://localhost:8080", "--endpoint", "-e", help="Server endpoint"),
+    endpoint: str = typer.Option(
+        "http://localhost:8080",
+        "--endpoint",
+        "-e",
+        help="Server endpoint",
+    ),
 ):
     """Upload files to a local repository."""
     from huggingface_hub import HfApi
