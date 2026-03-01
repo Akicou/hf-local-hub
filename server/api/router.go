@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,7 +25,7 @@ func (s *Server) SetupRouter() *gin.Engine {
 
 	r.GET("/health", s.Health)
 	r.GET("/auth/config", s.AuthConfig)
-	r.Static("/ui", "../ui/dist")
+	r.StaticFS("/ui", http.Dir(filepath.Join(s.cfg.DataDir, "..", "ui", "dist")))
 	r.GET("/", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/ui/")
 	})
