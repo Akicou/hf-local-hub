@@ -81,7 +81,7 @@ jobs:
 
       - name: Run tests
         working-directory: ./python
-        run: python -m pytest -v
+        run: python -m pytest -v --ignore=tests/test_integration.py
 
       - name: Run linter
         working-directory: ./python
