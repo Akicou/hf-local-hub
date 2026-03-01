@@ -27,6 +27,109 @@ GET /health
 }
 ```
 
+### Auth Config
+
+Get enabled authentication methods.
+
+```http
+GET /auth/config
+```
+
+**Response:**
+```json
+{
+  "token": true,
+  "hf": false,
+  "ldap": false
+}
+```
+
+### Token Login
+
+Login with authentication token.
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "token": "your-secret-token"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "<jwt-token>",
+  "user": {
+    "id": "token-user",
+    "name": "Token User"
+  }
+}
+```
+
+### HF OAuth Login
+
+Redirect to Hugging Face OAuth authorization.
+
+```http
+GET /api/auth/hf/login
+```
+
+**Response:**
+Redirects to Hugging Face OAuth consent screen.
+
+### HF OAuth Callback
+
+Handle OAuth callback from Hugging Face.
+
+```http
+GET /api/auth/hf/callback?code=...&state=...
+```
+
+**Response:**
+```json
+{
+  "token": "<jwt-token>",
+  "user": {
+    "sub": "hf-user",
+    "name": "HF User",
+    "email": "user@huggingface.co"
+  }
+}
+```
+
+### LDAP Login
+
+Login with LDAP credentials.
+
+```http
+POST /api/auth/ldap/login
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "username": "john.doe",
+  "password": "secure-password"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "<jwt-token>",
+  "user": {
+    "id": "john.doe",
+    "name": "john.doe"
+  }
+}
+```
+
 ### Create Repository
 
 Create a new repository.
@@ -234,10 +337,27 @@ hf-local serve [OPTIONS]
 - `--port`, `-p`: Server port (default: 8080)
 - `--data-dir`, `-d`: Data storage directory (default: ./data)
 - `--log-level`, `-l`: Log level (default: info)
+- `--token`: Authentication token
+- `--auth-token`: Enable token authentication
+- `--auth-hf`: Enable HuggingFace OAuth
+- `--hf-client-id`: HF OAuth client ID
+- `--hf-client-secret`: HF OAuth client secret
+- `--auth-ldap`: Enable LDAP authentication
+- `--ldap-server`: LDAP server address
 
 **Example:**
 ```bash
+# Basic server
 hf-local serve --port 9000 --data-dir ./models --log-level debug
+
+# With token auth
+hf-local serve --token "my-secret" --auth-token
+
+# With OAuth
+hf-local serve --auth-hf --hf-client-id "abc123" --hf-client-secret "xyz789"
+
+# With LDAP
+hf-local serve --auth-ldap --ldap-server "ldap.company.com"
 ```
 
 ### upload
@@ -315,6 +435,36 @@ hf-local status [OPTIONS]
 hf-local status
 ```
 
+### login
+
+Login with authentication token.
+
+```bash
+hf-local login [OPTIONS]
+```
+
+**Options:**
+- `--token`, `-t`: Authentication token (required)
+- `--endpoint`, `-e`: Server endpoint (default: http://localhost:8080)
+
+**Example:**
+```bash
+hf-local login --token "my-secret-token"
+```
+
+### logout
+
+Logout and clear stored credentials.
+
+```bash
+hf-local logout
+```
+
+**Example:**
+```bash
+hf-local logout
+```
+
 ## Python Library
 
 ### set_endpoint
@@ -329,6 +479,36 @@ set_endpoint("http://localhost:8080")
 
 **Parameters:**
 - `endpoint` (str): Server endpoint URL
+
+### login
+
+Login with authentication token.
+
+```python
+from hf_local import login
+
+success = login(token="my-secret-token", endpoint="http://localhost:8080")
+if success:
+    print("Logged in")
+```
+
+**Parameters:**
+- `token` (str): Authentication token
+- `endpoint` (str, default: "http://localhost:8080"): Server endpoint URL
+
+**Returns:** bool - True if login successful
+
+### logout
+
+Logout and clear stored credentials.
+
+```python
+from hf_local import logout
+
+logout()
+```
+
+**Note:** Clears HF_TOKEN environment variable.
 
 ### serve_background
 
@@ -430,7 +610,76 @@ Access-Control-Allow-Headers: Content-Type, Authorization
 
 ## Authentication
 
-Authentication is not currently implemented. All requests are public.
+hf-local-hub supports multiple authentication methods. All authenticated endpoints require a JWT token in the `Authorization` header:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### Authentication Methods
+
+| Method | Enable Flag | Environment Variable |
+|--------|-------------|---------------------|
+| Token | `-auth-token` | `HF_LOCAL_AUTH_TOKEN=true` |
+| HF OAuth | `-auth-hf` | `HF_LOCAL_AUTH_HF=true` |
+| LDAP | `-auth-ldap` | `HF_LOCAL_AUTH_LDAP=true` |
+
+### Token Authentication
+
+Simple shared secret authentication:
+
+```bash
+# Server
+hf-local serve --token "my-secret" --auth-token
+
+# Client login
+hf-local login --token "my-secret"
+```
+
+### Hugging Face OAuth
+
+OAuth2 flow with Hugging Face:
+
+```bash
+# Server with OAuth
+hf-local serve \
+  --auth-hf \
+  --hf-client-id "your-client-id" \
+  --hf-client-secret "your-client-secret" \
+  --hf-callback-url "http://localhost:8080/auth/hf/callback"
+```
+
+### LDAP
+
+Corporate directory authentication:
+
+```bash
+# Server with LDAP
+hf-local serve \
+  --auth-ldap \
+  --ldap-server "ldap.company.com" \
+  --ldap-port 389 \
+  --ldap-bind-dn "cn=admin,dc=company,dc=com" \
+  --ldap-bind-pass "password" \
+  --ldap-base-dn "ou=users,dc=company,dc=com" \
+  --ldap-filter "(uid=%s)"
+```
+
+### JWT Token
+
+All authentication methods return a JWT token with this structure:
+
+```json
+{
+  "user_id": "username",
+  "username": "Display Name",
+  "provider": "token|hf|ldap",
+  "exp": 1738362000,
+  "iat": 1738275600
+}
+```
+
+Token expiration: 24 hours
 
 ## Data Model
 
@@ -492,6 +741,9 @@ hf-local-hub implements a subset of the Hugging Face Hub API:
 | List models | ✓ |
 | Get model info | ✓ |
 | LFS support | ✓ (stub) |
+| Token auth | ✓ |
+| OAuth | ✓ |
+| LDAP | ✓ |
 | Git operations | ✗ |
 | Webhooks | ✗ |
 | Discussions | ✗ |
