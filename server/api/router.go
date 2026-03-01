@@ -77,8 +77,8 @@ func (s *Server) SetupRouter() *gin.Engine {
 
 	r.GET("/:repo_id/resolve/:revision/*path", s.ResolveFile)
 
-	// HTML pages
-	r.GET("/r/:repo_id", s.RepoPage)
+	// HTML pages - use wildcard to capture repo_id with slashes
+	r.GET("/r/*repo_id", s.RepoPage)
 
 	return r
 }

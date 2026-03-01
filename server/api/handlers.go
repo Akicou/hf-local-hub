@@ -215,7 +215,11 @@ func (s *Server) ListFiles(c *gin.Context) {
 }
 
 func (s *Server) RepoPage(c *gin.Context) {
-	repoID := c.Param("repo_id")
+	repoID := strings.TrimPrefix(c.Param("repo_id"), "/")
+	if repoID == "" || !strings.Contains(repoID, "/") {
+		c.String(http.StatusBadRequest, "Invalid repository ID. Expected format: namespace/name")
+		return
+	}
 	var repo db.Repo
 	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
 		c.String(http.StatusNotFound, "Repository not found")
