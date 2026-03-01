@@ -1,8 +1,15 @@
-.PHONY: dev server build test lint clean docker
+.PHONY: dev build test lint clean docker
 
 # Go
+build:
+	@cd server && go build -o ../hf-local .
+
 server:
-	@cd server && go build -o ../hf-local.exe .
+	@if [ -d "../server" ]; then \
+		cd server && go build -o ../hf-local; \
+	else \
+		go build -o hf-local; \
+	fi
 
 server-test:
 	@cd server && go test -v ./...
