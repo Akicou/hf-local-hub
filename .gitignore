@@ -1,0 +1,61 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+hf-local
+hf-local.exe
+bin/
+
+# Go
+*.test
+*.out
+go.sum
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+ENV/
+
+# Data
+data/storage/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
