@@ -42,7 +42,13 @@ def serve_background(
         "-log-level", log_level,
     ]
 
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # Capture output for debugging
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
+    )
 
     try:
         import time
@@ -57,7 +63,12 @@ def serve_background(
             except:
                 time.sleep(0.5)
         else:
-            raise TimeoutError(f"Server did not start within {timeout} seconds")
+            # Log any output from server for debugging
+            output = process.stdout.read()
+            raise TimeoutError(
+                f"Server did not start within {timeout} seconds\n"
+                f"Server output: {output}"
+            )
 
         set_endpoint(endpoint)
         yield

@@ -145,6 +145,9 @@ func TestGetRepo(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/api/models/user/specific-repo", nil)
 	router.ServeHTTP(w, req)
 
+	t.Logf("Response status: %d", w.Code)
+	t.Logf("Response body: %s", w.Body.String())
+
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var repo db.Repo
@@ -175,6 +178,9 @@ func TestLFSInfo(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/models/user/test-model/info/lfs", nil)
 	router.ServeHTTP(w, req)
+
+	t.Logf("Response status: %d", w.Code)
+	t.Logf("Response body: %s", w.Body.String())
 
 	assert.Equal(t, http.StatusOK, w.Code)
 

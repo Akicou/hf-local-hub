@@ -19,8 +19,8 @@ def find_binary() -> str:
     binary_name = "hf-local.exe" if os.name == "nt" else "hf-local"
 
     paths = [
-        Path.cwd() / binary_name,
-        Path(__file__).parent.parent.parent.parent / "server" / binary_name,
+        Path(__file__).parent.parent / binary_name,
+        Path(__file__).parent.parent.parent / "server" / binary_name,
     ]
 
     for path in paths:
@@ -31,7 +31,10 @@ def find_binary() -> str:
         return binary_name
 
     raise FileNotFoundError(
-        "hf-local binary not found. Build with 'make server' or add to PATH.",
+        f"hf-local binary not found. Searched in:\n"
+        f"  - {paths[0]}\n"
+        f"  - {paths[1]}\n"
+        "Build with 'make server' or add to PATH.",
     )
 
 
