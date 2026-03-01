@@ -29,7 +29,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	dbConn, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_fk=1"), &gorm.Config{})
 	require.NoError(t, err)
 
-	dbConn.AutoMigrate(&db.Repo{}, &db.Commit{}, &db.FileIndex{})
+	_ = dbConn.AutoMigrate(&db.Repo{}, &db.Commit{}, &db.FileIndex{})
 	return dbConn
 }
 

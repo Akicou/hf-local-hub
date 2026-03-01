@@ -78,7 +78,7 @@ func TestFileExists(t *testing.T) {
 	s := New(tmpDir)
 
 	existingFile := filepath.Join(tmpDir, "existing.txt")
-	os.WriteFile(existingFile, []byte("test"), 0644)
+	_ = os.WriteFile(existingFile, []byte("test"), 0644)
 
 	if !s.FileExists(existingFile) {
 		t.Error("FileExists returned false for existing file")

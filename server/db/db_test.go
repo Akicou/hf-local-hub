@@ -10,7 +10,7 @@ func TestInitDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitDB failed: %v", err)
 	}
-	defer CloseDB(db)
+	defer func() { _ = CloseDB(db) }()
 
 	if db == nil {
 		t.Fatal("InitDB returned nil db")
@@ -24,7 +24,7 @@ func TestInitDB(t *testing.T) {
 func TestRepoModel(t *testing.T) {
 	tmpFile := t.TempDir() + "/test.db"
 	db, _ := InitDB(tmpFile)
-	defer CloseDB(db)
+	defer func() { _ = CloseDB(db) }()
 
 	repo := Repo{
 		RepoID:    "user/test-model",
@@ -55,7 +55,7 @@ func TestRepoModel(t *testing.T) {
 func TestCommitModel(t *testing.T) {
 	tmpFile := t.TempDir() + "/test.db"
 	db, _ := InitDB(tmpFile)
-	defer CloseDB(db)
+	defer func() { _ = CloseDB(db) }()
 
 	repo := Repo{RepoID: "user/test", Namespace: "user", Name: "test", Type: "model"}
 	db.Create(&repo)
@@ -83,7 +83,7 @@ func TestCommitModel(t *testing.T) {
 func TestFileIndexModel(t *testing.T) {
 	tmpFile := t.TempDir() + "/test.db"
 	db, _ := InitDB(tmpFile)
-	defer CloseDB(db)
+	defer func() { _ = CloseDB(db) }()
 
 	repo := Repo{RepoID: "user/test", Namespace: "user", Name: "test", Type: "model"}
 	db.Create(&repo)
