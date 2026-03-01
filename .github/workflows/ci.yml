@@ -74,7 +74,10 @@ jobs:
         working-directory: ./python
         run: |
           python -m pip install --upgrade pip
+          # Install in editable mode but without entry point to avoid PATH conflicts
           pip install -e ".[dev]"
+          # Remove entry point from PATH
+          rm -f $CONDA/bin/hf-local 2>/dev/null || true
 
       - name: Run tests
         working-directory: ./python
