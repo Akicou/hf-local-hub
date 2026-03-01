@@ -278,6 +278,7 @@ func (s *Server) RepoPage(c *gin.Context) {
 		Private   bool
 		CreatedAt string
 		HasFiles  bool
+		FileCount int
 		Files     []FileView
 	}{
 		Namespace: repo.Namespace,
@@ -286,6 +287,7 @@ func (s *Server) RepoPage(c *gin.Context) {
 		Private:   repo.Private,
 		CreatedAt: repo.CreatedAt.Format("Jan 2, 2006"),
 		HasFiles:  len(fileViews) > 0,
+		FileCount: len(fileViews),
 		Files:     fileViews,
 	}
 
