@@ -8,10 +8,7 @@ import (
 //go:embed dist templates
 var files embed.FS
 
+// FS returns the root embedded filesystem containing both dist and templates
 func FS() fs.FS {
-	sub, err := fs.Sub(files, "dist")
-	if err != nil {
-		panic(err)
-	}
-	return sub
+	return files
 }
