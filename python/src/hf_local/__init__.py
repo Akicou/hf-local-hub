@@ -64,7 +64,7 @@ def serve_background(
                 time.sleep(0.5)
         else:
             # Log any output from server for debugging
-            output = process.stdout.read()
+            output = process.stdout.read()  # type: ignore
             raise TimeoutError(
                 f"Server did not start within {timeout} seconds\n"
                 f"Server output: {output}"

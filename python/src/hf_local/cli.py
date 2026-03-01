@@ -90,7 +90,7 @@ def serve(
             text=True,
         )
 
-        for line in process.stdout:
+        for line in process.stdout:  # type: ignore
             console.print(line.strip())
 
     except KeyboardInterrupt:
