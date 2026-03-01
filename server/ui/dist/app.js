@@ -82,7 +82,7 @@ class App {
   }
 
   async loadRepositories() {
-    const endpoint = this.currentTab === 'models' ? '/api/models' : '/api/datasets';
+    const endpoint = this.currentTab === 'models' ? '/api/models/' : '/api/datasets/';
     try {
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error();
@@ -122,6 +122,9 @@ class App {
       return;
     }
     container.innerHTML = list.map(r => this.cardHTML(r)).join('');
+    container.querySelectorAll('.repo-card').forEach((card, i) => {
+      card.addEventListener('click', () => this.showRepoDetail(list[i]));
+    });
   }
 
   cardHTML(r) {
@@ -148,11 +151,65 @@ class App {
       </div>`;
   }
 
+  async showRepoDetail(r) {
+    const type = r.type || 'model';
+    const endpoint = `/api/${type}s/${r.repo_id}`;
+    let detail = r;
+    try {
+      const res = await fetch(endpoint);
+      if (res.ok) detail = await res.json();
+    } catch {}
+
+    const overlay = document.getElementById('repoModal');
+    const modal = overlay.querySelector('.modal');
+    modal.querySelector('.modal-head h2').textContent = `${detail.namespace}/${detail.name}`;
+    modal.querySelector('form').innerHTML = `
+      <div class="form-group">
+        <label>Repo ID</label>
+        <input readonly value="${this.esc(detail.repo_id || detail.namespace+'/'+detail.name)}">
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <input readonly value="${this.esc(type)}">
+      </div>
+      <div class="form-group">
+        <label>Visibility</label>
+        <input readonly value="${detail.private ? 'Private' : 'Public'}">
+      </div>
+      <div class="form-group">
+        <label>Created</label>
+        <input readonly value="${detail.created_at ? new Date(detail.created_at).toLocaleString() : '—'}">
+      </div>`;
+    modal.querySelector('.modal-head h2').textContent = `${this.esc(detail.namespace)}/${this.esc(detail.name)}`;
+    const actions = modal.querySelector('.modal-actions');
+    actions.innerHTML = `<button class="btn-cancel" style="grid-column:1/-1" id="modalCancel">Close</button>`;
+    document.getElementById('modalCancel').addEventListener('click', () => {
+      overlay.classList.remove('show');
+      this._resetModal();
+    });
+    overlay.classList.add('show');
+  }
+
+  _resetModal() {
+    const modal = document.getElementById('repoModal').querySelector('.modal');
+    modal.querySelector('.modal-head h2').textContent = 'Create Repository';
+    modal.querySelector('form').innerHTML = `
+      <div class="form-group"><label>Repository Name</label><input type="text" name="name" required placeholder="my-awesome-model"></div>
+      <div class="form-group"><label>Namespace</label><input type="text" name="namespace" required placeholder="username-or-org"></div>
+      <div class="form-group"><label>Type</label><select name="type"><option value="model">Model</option><option value="dataset">Dataset</option><option value="space">Space</option></select></div>
+      <div class="form-check"><input type="checkbox" name="private" id="private"><label for="private">Private repository</label></div>`;
+    modal.querySelector('.modal-actions').innerHTML = `
+      <button class="btn-cancel" id="modalCancel">Cancel</button>
+      <button class="btn-submit" id="modalSubmit">Create</button>`;
+    this.bindModal();
+  }
+
   esc(s) {
     return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   showModal() {
+    this._resetModal();
     document.getElementById('repoModal').classList.add('show');
   }
 
