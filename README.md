@@ -411,8 +411,8 @@ make docker-down
 - [x] Phase 1: Go Server Core
 - [x] Phase 2: Python Package & CLI
 - [x] Phase 3: Full HF Compatibility
-- [ ] Phase 4: Packaging & Documentation
-- [ ] Phase 5: CI/CD & GitHub Readiness
+- [x] Phase 4: Packaging & Documentation
+- [x] Phase 5: CI/CD & GitHub Readiness
 
 ## License
 
@@ -433,7 +433,7 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Current Release
 
-**Version 0.1.0** - March 1, 2026
+**Version 0.2.0** - March 1, 2026
 
 ### Installation
 
@@ -506,14 +506,14 @@ Built with:
 ## Roadmap
 
 ### v0.2.0
-- [ ] Authentication and authorization
+- [x] Authentication and authorization
 - [ ] User management
 - [ ] Repository access control
 - [ ] Git operations (branches, tags)
 - [ ] Model metadata search
 
 ### v0.3.0
-- [ ] Web UI for repository management
+- [x] Web UI for repository management
 - [ ] Model card editor
 - [ ] File preview
 - [ ] Model sharing features
