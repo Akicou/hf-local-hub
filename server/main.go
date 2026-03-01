@@ -4,6 +4,7 @@ import (
 	"github.com/lyani/hf-local-hub/server/api"
 	"github.com/lyani/hf-local-hub/server/config"
 	"github.com/lyani/hf-local-hub/server/db"
+	"github.com/lyani/hf-local-hub/server/middleware"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,7 +20,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
-	_ = logger.Sync()
+	defer logger.Sync()
 
 	if cfg.LogLevel == "debug" {
 		logger, err = zap.NewDevelopment()
@@ -41,11 +42,32 @@ func main() {
 	server := api.New(cfg, database, logger)
 	router := server.SetupRouter()
 
+	if cfg.RateLimit.Enabled {
+		rateLimiter := middleware.NewRateLimiter(cfg.RateLimit.RequestsMin, cfg.RateLimit.Burst)
+		router.Use(rateLimiter.Middleware())
+		logger.Info("Rate limiting enabled",
+			zap.Int("requests_per_minute", cfg.RateLimit.RequestsMin),
+			zap.Int("burst", cfg.RateLimit.Burst),
+		)
+	}
+
+	if cfg.Limits.MaxFileSize > 0 || cfg.Limits.MaxRequestSize > 0 {
+		limits := middleware.LimitsConfig{
+			MaxFileSize:    cfg.Limits.MaxFileSize,
+			MaxRequestSize: cfg.Limits.MaxRequestSize,
+		}
+		router.Use(middleware.NewSizeLimits(limits))
+		logger.Info("Size limits enabled",
+			zap.Int64("max_file_size", cfg.Limits.MaxFileSize),
+			zap.Int64("max_request_size", cfg.Limits.MaxRequestSize),
+		)
+	}
+
 	srv := &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
 		Handler:      router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ReadTimeout:  cfg.Limits.RequestTimeout,
+		WriteTimeout: cfg.Limits.RequestTimeout,
 		IdleTimeout:  120 * time.Second,
 	}
 

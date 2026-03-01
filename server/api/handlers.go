@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/lyani/hf-local-hub/server/auth"
 	"github.com/lyani/hf-local-hub/server/config"
 	"github.com/lyani/hf-local-hub/server/db"
 	"github.com/lyani/hf-local-hub/server/storage"
@@ -13,23 +14,108 @@ import (
 )
 
 type Server struct {
-	cfg     *config.Config
-	db      *gorm.DB
-	storage *storage.Storage
-	logger  *zap.Logger
+	cfg           *config.Config
+	db            *gorm.DB
+	storage       *storage.Storage
+	logger        *zap.Logger
+	auth          *auth.Middleware
+	hfProvider    *auth.HFProvider
+	ldapProvider  *auth.LDAPProvider
 }
 
 func New(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Server {
-	return &Server{
+	server := &Server{
 		cfg:     cfg,
 		db:      db,
-		storage: storage.New(cfg.DataDir),
+		storage: storage.New(cfg.Storage.ModelsPath, cfg.Storage.DatasetsPath, cfg.Storage.SpacesPath),
 		logger:  logger,
+		auth:    auth.NewMiddleware(cfg.Auth.JWTSecret),
 	}
+	if cfg.Auth.EnableHFAuth {
+		server.hfProvider = auth.NewHFProvider(cfg.Auth.HFClientID, cfg.Auth.HFClientSecret, cfg.Auth.HFCallbackURL, server.auth)
+	}
+	if cfg.Auth.EnableLDAP {
+		server.ldapProvider = auth.NewLDAPProvider(cfg.Auth.LDAPServer, cfg.Auth.LDAPPort, cfg.Auth.LDAPBindDN, cfg.Auth.LDAPBindPass, cfg.Auth.LDAPBaseDN, cfg.Auth.LDAPFilter)
+	}
+	return server
 }
 
 func (s *Server) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (s *Server) AuthConfig(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"token": s.cfg.Auth.EnableTokenAuth,
+		"hf":    s.cfg.Auth.EnableHFAuth,
+		"ldap":  s.cfg.Auth.EnableLDAP,
+	})
+}
+
+func (s *Server) TokenLogin(c *gin.Context) {
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if s.cfg.Token != "" && req.Token != s.cfg.Token {
+		c.JSON(401, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	token, err := s.auth.GenerateToken("token-user", "Token User", "token")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": token, "user": gin.H{"id": "token-user", "name": "Token User"}})
+}
+
+func (s *Server) HFLogin(c *gin.Context) {
+	if s.hfProvider == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "HF OAuth not enabled"})
+		return
+	}
+	s.hfProvider.Login(c)
+}
+
+func (s *Server) HFCallback(c *gin.Context) {
+	if s.hfProvider == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "HF OAuth not enabled"})
+		return
+	}
+	s.hfProvider.Callback(c)
+}
+
+func (s *Server) LDAPLogin(c *gin.Context) {
+	if s.ldapProvider == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "LDAP not enabled"})
+		return
+	}
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	userID, err := s.ldapProvider.Authenticate(req.Username, req.Password)
+	if err != nil {
+		c.JSON(401, gin.H{"error": "Invalid credentials"})
+		return
+	}
+	token, err := s.auth.GenerateToken(userID, req.Username, "ldap")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to generate token"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": token, "user": gin.H{"id": userID, "name": req.Username}})
 }
 
 func (s *Server) CreateRepo(c *gin.Context) {
@@ -78,13 +164,23 @@ func (s *Server) CreateRepo(c *gin.Context) {
 	c.JSON(http.StatusCreated, repo)
 }
 
-func (s *Server) ListModels(c *gin.Context) {
+func (s *Server) ListRepos(c *gin.Context) {
+	repoType := c.DefaultQuery("type", "model")
 	var repos []db.Repo
-	if err := s.db.Where("type = ?", "model").Find(&repos).Error; err != nil {
+	if err := s.db.Where("type = ?", repoType).Find(&repos).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, repos)
+}
+
+func (s *Server) ListModels(c *gin.Context) {
+	s.ListRepos(c)
+}
+
+func (s *Server) ListDatasets(c *gin.Context) {
+	c.Request.URL.RawQuery = "type=dataset"
+	s.ListRepos(c)
 }
 
 func (s *Server) GetRepo(c *gin.Context) {
@@ -174,9 +270,53 @@ func (s *Server) Commit(c *gin.Context) {
 }
 
 func (s *Server) LFSInfo(c *gin.Context) {
-	// LFS stub: always return that files are regular (not LFS)
 	c.JSON(http.StatusOK, gin.H{
 		"lfs": false,
 		"size": 0,
 	})
 }
+
+func (s *Server) UploadFile(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	revision := c.DefaultQuery("revision", "main")
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
+		return
+	}
+
+	if file.Size > s.cfg.Limits.MaxFileSize {
+		c.JSON(413, gin.H{"error": "File too large"})
+		return
+	}
+
+	repoSize, err := s.storage.GetRepoSize(repo.Type, repo.Namespace, repo.Name)
+	if err == nil {
+		if repoSize+file.Size > s.cfg.Limits.MaxRepoSize {
+			c.JSON(413, gin.H{"error": "Repository size limit exceeded"})
+			return
+		}
+	}
+
+	filePath := c.PostForm("path")
+	if filePath == "" {
+		filePath = file.Filename
+	}
+
+	targetPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, revision, filePath)
+	if err := c.SaveUploadedFile(file, targetPath); err != nil {
+		s.logger.Error("failed to save file", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"path": filePath, "size": file.Size})
+}
+

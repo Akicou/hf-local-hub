@@ -8,15 +8,33 @@ import (
 )
 
 type Storage struct {
-	baseDir string
+	modelsPath  string
+	datasetsPath string
+	spacesPath  string
 }
 
-func New(baseDir string) *Storage {
-	return &Storage{baseDir: baseDir}
+func New(modelsPath, datasetsPath, spacesPath string) *Storage {
+	return &Storage{
+		modelsPath:  modelsPath,
+		datasetsPath: datasetsPath,
+		spacesPath:  spacesPath,
+	}
+}
+
+func (s *Storage) getPath(repoType string) string {
+	switch repoType {
+	case "dataset":
+		return s.datasetsPath
+	case "space":
+		return s.spacesPath
+	default:
+		return s.modelsPath
+	}
 }
 
 func (s *Storage) RepoPath(repoType, namespace, name string) string {
-	return filepath.Join(s.baseDir, "storage", repoType, namespace, name)
+	basePath := s.getPath(repoType)
+	return filepath.Join(basePath, namespace, name)
 }
 
 func (s *Storage) RevisionPath(repoType, namespace, name, revision string) string {
@@ -89,3 +107,21 @@ func (s *Storage) FileExists(path string) bool {
 func (s *Storage) EnsureDir(path string) error {
 	return os.MkdirAll(path, 0755)
 }
+
+func (s *Storage) GetRepoSize(repoType, namespace, name string) (int64, error) {
+	repoPath := s.RepoPath(repoType, namespace, name)
+	var size int64
+
+	err := filepath.Walk(repoPath, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+
+	return size, err
+}
+

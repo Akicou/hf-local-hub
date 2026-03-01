@@ -37,13 +37,20 @@ func setupTestRouter(database *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	cfg := &config.Config{DataDir: "."}
+	cfg := &config.Config{
+		DataDir: ".",
+		Storage: config.StorageConfig{
+			ModelsPath:  "./models",
+			DatasetsPath: "./datasets",
+			SpacesPath:  "./spaces",
+		},
+	}
 	logger, _ := zap.NewDevelopment()
 
 	s := &Server{
 		cfg:     cfg,
 		db:      database,
-		storage: storage.New(cfg.DataDir),
+		storage: storage.New(cfg.Storage.ModelsPath, cfg.Storage.DatasetsPath, cfg.Storage.SpacesPath),
 		logger:  logger,
 	}
 

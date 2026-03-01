@@ -9,13 +9,46 @@ from typing import Optional
 from .cli import app as cli
 from .cli import find_binary
 
-__version__ = "0.1.0"
-__all__ = ["cli", "serve_background", "set_endpoint", "upload_folder"]
+__version__ = "0.2.0"
+__all__ = ["cli", "serve_background", "set_endpoint", "upload_folder", "login", "logout"]
 
 
 def set_endpoint(endpoint: str = "http://localhost:8080") -> None:
     """Set HF_ENDPOINT environment variable for huggingface_hub integration."""
     os.environ["HF_ENDPOINT"] = endpoint
+
+
+def login(token: str, endpoint: str = "http://localhost:8080") -> bool:
+    """Login with authentication token.
+
+    Args:
+        token: Authentication token
+        endpoint: Server endpoint URL
+
+    Returns:
+        True if login successful
+
+    """
+    import httpx
+
+    try:
+        response = httpx.post(
+            f"{endpoint}/api/auth/login",
+            json={"token": token},
+            timeout=5.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        # Store token in environment for huggingface_hub
+        os.environ["HF_TOKEN"] = data.get("token", token)
+        return True
+    except Exception:
+        return False
+
+
+def logout() -> None:
+    """Logout by clearing stored credentials."""
+    os.environ.pop("HF_TOKEN", None)
 
 
 @contextmanager

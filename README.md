@@ -86,6 +86,198 @@ model = AutoModel.from_pretrained('user/my-model')
 "
 ```
 
+## Authentication
+
+HF Local Hub supports three authentication methods:
+
+### 1. Token Authentication (Simple)
+
+The simplest method - use a shared secret token.
+
+**Enable via CLI:**
+```bash
+./hf-local -token "your-secret-token" -auth-token
+```
+
+**Enable via Environment Variables:**
+```bash
+export HF_LOCAL_TOKEN="your-secret-token"
+export HF_LOCAL_AUTH_TOKEN="true"
+```
+
+**Using with the UI:**
+Click "Login" and enter your token when prompted.
+
+**Using with CLI/Python:**
+```bash
+export HF_ENDPOINT=http://localhost:8080
+export HF_TOKEN="your-secret-token"
+huggingface-cli download user/my-model
+```
+
+**How it works:**
+- Client sends token to `/api/auth/login`
+- Server validates the token against the configured secret
+- Server returns a JWT token (valid for 24 hours)
+- Client includes JWT in `Authorization: Bearer <token>` header for subsequent requests
+
+---
+
+### 2. Hugging Face OAuth
+
+Authenticates users through Hugging Face's OAuth2 flow.
+
+**Prerequisites:**
+1. Create a Hugging Face OAuth application at https://huggingface.co/settings/applications
+2. Set redirect URL to: `http://localhost:8080/auth/hf/callback`
+3. Note your Client ID and Client Secret
+
+**Enable via CLI:**
+```bash
+./hf-local \
+  -auth-hf \
+  -hf-client-id "your-client-id" \
+  -hf-client-secret "your-client-secret" \
+  -hf-callback-url "http://localhost:8080/auth/hf/callback"
+```
+
+**Enable via Environment Variables:**
+```bash
+export HF_LOCAL_AUTH_HF="true"
+export HF_LOCAL_HF_CLIENT_ID="your-client-id"
+export HF_LOCAL_HF_CLIENT_SECRET="your-client-secret"
+export HF_LOCAL_HF_CALLBACK_URL="http://localhost:8080/auth/hf/callback"
+```
+
+**Using with the UI:**
+The UI's "Login" button will redirect to Hugging Face's authorization page.
+
+**How it works:**
+1. User clicks "Login" → redirect to `https://huggingface.co/oauth/authorize`
+2. User approves the application on Hugging Face
+3. Hugging Face redirects back with an authorization code
+4. Server exchanges code for an access token
+5. Server fetches user info and generates a JWT
+6. Client uses JWT for authenticated requests
+
+**Scopes requested:**
+- `openid` - OpenID Connect authentication
+- `profile` - User's display name and profile info
+- `email` - User's email address
+
+---
+
+### 3. LDAP Authentication
+
+Authenticate against your corporate LDAP/Active Directory server.
+
+**Enable via CLI:**
+```bash
+./hf-local \
+  -auth-ldap \
+  -ldap-server "ldap.company.com" \
+  -ldap-port 389 \
+  -ldap-bind-dn "cn=admin,dc=company,dc=com" \
+  -ldap-bind-pass "admin-password" \
+  -ldap-base-dn "ou=users,dc=company,dc=com" \
+  -ldap-filter "(uid=%s)"
+```
+
+**Enable via Environment Variables:**
+```bash
+export HF_LOCAL_AUTH_LDAP="true"
+export HF_LOCAL_LDAP_SERVER="ldap.company.com"
+export HF_LOCAL_LDAP_PORT="389"
+export HF_LOCAL_LDAP_BIND_DN="cn=admin,dc=company,dc=com"
+export HF_LOCAL_LDAP_BIND_PASS="admin-password"
+export HF_LOCAL_LDAP_BASE_DN="ou=users,dc=company,dc=com"
+export HF_LOCAL_LDAP_FILTER="(uid=%s)"
+```
+
+**Using with the UI:**
+Currently, LDAP login requires the token endpoint. Set up a simple token auth proxy or use CLI tools.
+
+**LDAP Configuration Options:**
+- `ldap-server`: LDAP server hostname or IP
+- `ldap-port`: LDAP port (389 for unencrypted, 636 for LDAPS)
+- `ldap-bind-dn`: DN of the service account for binding/searching
+- `ldap-bind-pass`: Password for the service account
+- `ldap-base-dn`: Base DN for user searches (e.g., `ou=users,dc=company,dc=com`)
+- `ldap-filter`: Search filter to find users. `%s` is replaced with username
+  - For uid-based: `(uid=%s)`
+  - For email-based: `(mail=%s)`
+  - For sAMAccountName (AD): `(sAMAccountName=%s)`
+
+**How it works:**
+1. Server binds to LDAP using service account credentials
+2. Server searches for user using the configured filter
+3. Server attempts to bind using user DN and provided password
+4. If successful, server generates JWT token with user attributes
+5. User can retrieve email, display name, etc. from LDAP attributes
+
+**Security Notes:**
+- Use LDAPS (port 636) or StartTLS for production
+- Service account should have read-only access to user directory
+- Store bind credentials securely (use environment variables, not CLI args)
+
+---
+
+### JWT Token Details
+
+All authentication methods issue JWT tokens with the following structure:
+
+```json
+{
+  "user_id": "username-or-uid",
+  "username": "Display Name",
+  "provider": "token|hf|ldap",
+  "exp": 1738362000,
+  "iat": 1738275600
+}
+```
+
+- **Expiration**: 24 hours after issue
+- **Signing**: HMAC-SHA256 with configured JWT secret
+- **Storage**: Client stores token (localStorage for web, env var for CLI)
+
+---
+
+### Protecting API Endpoints
+
+The server supports two middleware levels:
+
+**Optional Auth** (default):
+- Users can access public repositories without authentication
+- Authenticated users see their private repositories
+- Used for: `GET /api/models`, `GET /api/datasets`, `GET /api/repos/:repo_id`
+
+**Required Auth** (future):
+- Must be authenticated to access
+- Used for: Upload, delete, modify operations (to be added)
+
+---
+
+### Environment Variables Reference
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `HF_LOCAL_TOKEN` | Shared secret for token auth | `my-secret-key` |
+| `HF_LOCAL_AUTH_TOKEN` | Enable token authentication | `true` |
+| `HF_LOCAL_AUTH_HF` | Enable HF OAuth | `true` |
+| `HF_LOCAL_HF_CLIENT_ID` | HF OAuth client ID | `abc123` |
+| `HF_LOCAL_HF_CLIENT_SECRET` | HF OAuth client secret | `xyz789` |
+| `HF_LOCAL_HF_CALLBACK_URL` | HF OAuth callback URL | `http://localhost:8080/auth/hf/callback` |
+| `HF_LOCAL_AUTH_LDAP` | Enable LDAP authentication | `true` |
+| `HF_LOCAL_LDAP_SERVER` | LDAP server address | `ldap.company.com` |
+| `HF_LOCAL_LDAP_PORT` | LDAP port | `389` |
+| `HF_LOCAL_LDAP_BIND_DN` | LDAP bind DN | `cn=admin,dc=company,dc=com` |
+| `HF_LOCAL_LDAP_BIND_PASS` | LDAP bind password | `admin-password` |
+| `HF_LOCAL_LDAP_BASE_DN` | LDAP base DN | `ou=users,dc=company,dc=com` |
+| `HF_LOCAL_LDAP_FILTER` | LDAP user search filter | `(uid=%s)` |
+| `HF_LOCAL_JWT_SECRET` | JWT signing secret (defaults to TOKEN) | `change-me-in-production` |
+
+---
+
 ## Installation
 
 ### Requirements
@@ -280,6 +472,7 @@ snapshot_download('user/my-model')
 - ✅ Upload/download workflows
 - ✅ Transformers and Diffusers integration
 - ✅ Docker support
+- ✅ Multiple auth methods (Token, OAuth, LDAP)
 - ✅ Comprehensive tests
 - ✅ Complete documentation
 

@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 import httpx
 import typer
@@ -62,6 +63,41 @@ def serve(
         "-l",
         help="Log level (debug, info, warn, error)",
     ),
+    token: Optional[str] = typer.Option(
+        None,
+        "--token",
+        help="Authentication token",
+    ),
+    auth_token: bool = typer.Option(
+        False,
+        "--auth-token",
+        help="Enable token authentication",
+    ),
+    auth_hf: bool = typer.Option(
+        False,
+        "--auth-hf",
+        help="Enable HuggingFace OAuth",
+    ),
+    hf_client_id: Optional[str] = typer.Option(
+        None,
+        "--hf-client-id",
+        help="HF OAuth client ID",
+    ),
+    hf_client_secret: Optional[str] = typer.Option(
+        None,
+        "--hf-client-secret",
+        help="HF OAuth client secret",
+    ),
+    auth_ldap: bool = typer.Option(
+        False,
+        "--auth-ldap",
+        help="Enable LDAP authentication",
+    ),
+    ldap_server: Optional[str] = typer.Option(
+        None,
+        "--ldap-server",
+        help="LDAP server address",
+    ),
 ):
     """Start the hf-local server."""
     endpoint = f"http://localhost:{port}"
@@ -81,6 +117,21 @@ def serve(
         "-data-dir", data_dir,
         "-log-level", log_level,
     ]
+
+    if token:
+        cmd.extend(["-token", token])
+    if auth_token:
+        cmd.append("-auth-token")
+    if auth_hf:
+        cmd.append("-auth-hf")
+    if hf_client_id:
+        cmd.extend(["-hf-client-id", hf_client_id])
+    if hf_client_secret:
+        cmd.extend(["-hf-client-secret", hf_client_secret])
+    if auth_ldap:
+        cmd.append("-auth-ldap")
+    if ldap_server:
+        cmd.extend(["-ldap-server", ldap_server])
 
     try:
         process = subprocess.Popen(
@@ -235,6 +286,36 @@ def status(
         console.print("[red]✗ Server is not running[/red]")
         console.print("[dim]Start with: hf-local serve[/dim]")
         raise typer.Exit(1)
+
+
+@app.command()
+def login(
+    token: str = typer.Option(..., "--token", "-t", help="Authentication token"),
+    endpoint: str = typer.Option(
+        "http://localhost:8080",
+        "--endpoint",
+        "-e",
+        help="Server endpoint",
+    ),
+):
+    """Login with authentication token."""
+    import hf_local
+
+    if hf_local.login(token, endpoint):
+        console.print("[green]✓ Logged in successfully[/green]")
+        console.print("[dim]Token set in HF_TOKEN environment variable[/dim]")
+    else:
+        console.print("[red]✗ Login failed[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def logout():
+    """Logout and clear stored credentials."""
+    import hf_local
+
+    hf_local.logout()
+    console.print("[green]✓ Logged out[/green]")
 
 
 if __name__ == "__main__":

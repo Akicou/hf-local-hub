@@ -7,26 +7,26 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	s := New("./test-data")
+	s := New("./models", "./datasets", "./spaces")
 	if s == nil {
 		t.Fatal("New returned nil")
 	}
-	if s.baseDir != "./test-data" {
-		t.Errorf("Expected baseDir ./test-data, got %s", s.baseDir)
+	if s.modelsPath != "./models" {
+		t.Errorf("Expected modelsPath ./models, got %s", s.modelsPath)
 	}
 }
 
 func TestRepoPath(t *testing.T) {
-	s := New("./test-data")
+	s := New("./models", "./datasets", "./spaces")
 	path := s.RepoPath("model", "user", "repo")
-	expected := filepath.Join("test-data", "storage", "model", "user", "repo")
+	expected := filepath.Join("models", "user", "repo")
 	if path != expected {
 		t.Errorf("Expected %s, got %s", expected, path)
 	}
 }
 
 func TestSafePath(t *testing.T) {
-	s := New("./test-data")
+	s := New("./models", "./datasets", "./spaces")
 
 	tests := []struct {
 		name     string
@@ -53,7 +53,7 @@ func TestSafePath(t *testing.T) {
 
 func TestWriteAndReadFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	s := New(tmpDir)
+	s := New(tmpDir, tmpDir, tmpDir)
 
 	testData := []byte("test content")
 	testPath := filepath.Join(tmpDir, "test.txt")
@@ -75,7 +75,7 @@ func TestWriteAndReadFile(t *testing.T) {
 
 func TestFileExists(t *testing.T) {
 	tmpDir := t.TempDir()
-	s := New(tmpDir)
+	s := New(tmpDir, tmpDir, tmpDir)
 
 	existingFile := filepath.Join(tmpDir, "existing.txt")
 	_ = os.WriteFile(existingFile, []byte("test"), 0644)
@@ -92,7 +92,7 @@ func TestFileExists(t *testing.T) {
 
 func TestEnsureDir(t *testing.T) {
 	tmpDir := t.TempDir()
-	s := New(tmpDir)
+	s := New(tmpDir, tmpDir, tmpDir)
 
 	testDir := filepath.Join(tmpDir, "nested", "dir")
 	err := s.EnsureDir(testDir)
