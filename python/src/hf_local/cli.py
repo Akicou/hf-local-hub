@@ -135,7 +135,12 @@ def upload(
 
 @app.command()
 def list_repos(
-    endpoint: str = typer.Option("http://localhost:8080", "--endpoint", "-e", help="Server endpoint"),
+    endpoint: str = typer.Option(
+        "http://localhost:8080",
+        "--endpoint",
+        "-e",
+        help="Server endpoint",
+    ),
 ):
     """List repositories."""
     try:
@@ -191,7 +196,12 @@ def init(data_dir: str = typer.Option("./data", "--data-dir", "-d", help="Data d
 
 @app.command()
 def status(
-    endpoint: str = typer.Option("http://localhost:8080", "--endpoint", "-e", help="Server endpoint"),
+    endpoint: str = typer.Option(
+        "http://localhost:8080",
+        "--endpoint",
+        "-e",
+        help="Server endpoint",
+    ),
 ):
     """Check server status."""
     console.print(f"Checking server at {endpoint}...")
