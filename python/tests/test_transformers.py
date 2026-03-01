@@ -3,14 +3,14 @@
 import pytest
 from pathlib import Path
 
+from hf_local import serve_background, set_endpoint
+
 try:
     # ruff: noqa: F401
     from transformers import AutoModel, AutoTokenizer
     HAS_TRANSFORMERS = True
 except ImportError:
     HAS_TRANSFORMERS = False
-
-from hf_local import serve_background, set_endpoint
 
 
 @pytest.mark.skipif(not HAS_TRANSFORMERS, reason="transformers not installed")
