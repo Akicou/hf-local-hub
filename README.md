@@ -530,4 +530,4 @@ Built with:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=lyani/hf-local-hub&type=Date)](https://star-history.com/#lyani/hf-local-hub&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Akicou/hf-local-hub&type=Date)](https://star-history.com/#lyani/hf-local-hub&Date)
