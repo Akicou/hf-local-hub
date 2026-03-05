@@ -1,7 +1,10 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -61,32 +64,32 @@ func init() {
 }
 
 type AuthConfig struct {
-	JWTSecret      string
+	JWTSecret       string
 	EnableTokenAuth bool
-	EnableHFAuth   bool
-	HFClientID     string
-	HFClientSecret string
-	HFCallbackURL  string
-	EnableLDAP     bool
-	LDAPServer     string
-	LDAPPort       int
-	LDAPBindDN     string
-	LDAPBindPass   string
-	LDAPBaseDN     string
-	LDAPFilter     string
+	EnableHFAuth    bool
+	HFClientID      string
+	HFClientSecret  string
+	HFCallbackURL   string
+	EnableLDAP      bool
+	LDAPServer      string
+	LDAPPort        int
+	LDAPBindDN      string
+	LDAPBindPass    string
+	LDAPBaseDN      string
+	LDAPFilter      string
 }
 
 type StorageConfig struct {
-	ModelsPath  string
+	ModelsPath   string
 	DatasetsPath string
-	SpacesPath  string
+	SpacesPath   string
 }
 
 type LimitsConfig struct {
-	MaxFileSize      int64
-	MaxRepoSize      int64
-	MaxRequestSize   int64
-	RequestTimeout   time.Duration
+	MaxFileSize    int64
+	MaxRepoSize    int64
+	MaxRequestSize int64
+	RequestTimeout time.Duration
 }
 
 type RateLimitConfig struct {
@@ -96,13 +99,13 @@ type RateLimitConfig struct {
 }
 
 type Config struct {
-	Port     int
-	DataDir  string
-	Token    string
-	LogLevel string
-	Auth     AuthConfig
-	Storage  StorageConfig
-	Limits   LimitsConfig
+	Port      int
+	DataDir   string
+	Token     string
+	LogLevel  string
+	Auth      AuthConfig
+	Storage   StorageConfig
+	Limits    LimitsConfig
 	RateLimit RateLimitConfig
 }
 
@@ -263,12 +266,30 @@ func (cfg *Config) setDefaults() {
 	}
 }
 
+// generateRandomSecret generates a cryptographically secure random hex string
+func generateRandomSecret() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
 func (cfg *Config) setJWTSecret() {
 	if cfg.Auth.JWTSecret == "" {
 		if cfg.Token != "" {
 			cfg.Auth.JWTSecret = cfg.Token
 		} else {
-			cfg.Auth.JWTSecret = "change-me-in-production"
+			// Generate a random secret for development/testing
+			// In production, always set HF_LOCAL_JWT_SECRET environment variable
+			secret, err := generateRandomSecret()
+			if err != nil {
+				log.Printf("Warning: Failed to generate random JWT secret: %v", err)
+				cfg.Auth.JWTSecret = "change-me-in-production"
+			} else {
+				cfg.Auth.JWTSecret = secret
+				log.Printf("Generated random JWT secret (set HF_LOCAL_JWT_SECRET for persistence)")
+			}
 		}
 	}
 }

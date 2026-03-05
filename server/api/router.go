@@ -53,6 +53,10 @@ func (s *Server) SetupRouter() *gin.Engine {
 			repos.POST("/:repo_id/upload", s.UploadFile)
 			repos.POST("/:repo_id/preupload", s.Preupload)
 			repos.POST("/:repo_id/commit", s.Commit)
+			// LFS endpoints for repos
+			repos.POST("/:repo_id/lfs/info/lfs/batch", s.LFSBatch)
+			repos.PUT("/:repo_id/lfs/objects/:oid", s.LFSUploadObject)
+			repos.GET("/:repo_id/lfs/objects/:oid", s.LFSDownloadObject)
 		}
 
 		models := api.Group("/models")
@@ -66,6 +70,10 @@ func (s *Server) SetupRouter() *gin.Engine {
 			models.GET("/:repo_id/resolve/:revision/*path", s.ResolveFile)
 			models.GET("/:repo_id/raw/:revision/*path", s.ResolveFile)
 			models.GET("/:repo_id/info/lfs", s.LFSInfo)
+			// LFS batch endpoint
+			models.POST("/:repo_id/lfs/info/lfs/batch", s.LFSBatch)
+			models.PUT("/:repo_id/lfs/objects/:oid", s.LFSUploadObject)
+			models.GET("/:repo_id/lfs/objects/:oid", s.LFSDownloadObject)
 		}
 
 		datasets := api.Group("/datasets")
@@ -77,6 +85,10 @@ func (s *Server) SetupRouter() *gin.Engine {
 			datasets.POST("/:repo_id/commit", s.Commit)
 			datasets.GET("/:repo_id/resolve/:revision/*path", s.ResolveFile)
 			datasets.GET("/:repo_id/raw/:revision/*path", s.ResolveFile)
+			// LFS batch endpoint
+			datasets.POST("/:repo_id/lfs/info/lfs/batch", s.LFSBatch)
+			datasets.PUT("/:repo_id/lfs/objects/:oid", s.LFSUploadObject)
+			datasets.GET("/:repo_id/lfs/objects/:oid", s.LFSDownloadObject)
 		}
 	}
 
@@ -84,4 +96,3 @@ func (s *Server) SetupRouter() *gin.Engine {
 
 	return r
 }
-

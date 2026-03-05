@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,16 +11,16 @@ import (
 )
 
 type Storage struct {
-	modelsPath  string
+	modelsPath   string
 	datasetsPath string
-	spacesPath  string
+	spacesPath   string
 }
 
 func New(modelsPath, datasetsPath, spacesPath string) *Storage {
 	return &Storage{
-		modelsPath:  modelsPath,
+		modelsPath:   modelsPath,
 		datasetsPath: datasetsPath,
-		spacesPath:  spacesPath,
+		spacesPath:   spacesPath,
 	}
 }
 
@@ -41,30 +44,78 @@ func (s *Storage) RevisionPath(repoType, namespace, name, revision string) strin
 	return filepath.Join(s.RepoPath(repoType, namespace, name), "refs", revision)
 }
 
+// FilePath returns the full path for a file, using SafePath to prevent path traversal
 func (s *Storage) FilePath(repoType, namespace, name, revision, filePath string) string {
-	return filepath.Join(s.RevisionPath(repoType, namespace, name, revision), filepath.Clean(filePath))
+	basePath := s.RevisionPath(repoType, namespace, name, revision)
+	// Use SafePath to prevent path traversal attacks
+	safePath, ok := s.SafePath(basePath, filePath)
+	if !ok {
+		// If path is unsafe, return a safe default
+		return filepath.Join(basePath, filepath.Base(filePath))
+	}
+	return safePath
 }
 
+// SafePath validates and returns a safe path relative to base
+// Returns the absolute path and true if safe, empty string and false if unsafe
 func (s *Storage) SafePath(base, relPath string) (string, bool) {
+	// Reject absolute paths
 	if filepath.IsAbs(relPath) || strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, "\\") {
 		return "", false
 	}
+
+	// Clean the path first
 	cleanPath := filepath.Clean(relPath)
+
+	// Reject paths containing ..
 	if strings.Contains(cleanPath, "..") {
 		return "", false
 	}
+
+	// Get absolute base path
 	absBase, err := filepath.Abs(base)
 	if err != nil {
 		return "", false
 	}
+
+	// Get absolute target path
 	absPath, err := filepath.Abs(filepath.Join(base, cleanPath))
 	if err != nil {
 		return "", false
 	}
-	if !strings.HasPrefix(absPath, absBase) {
+
+	// Ensure target is within base directory
+	if !strings.HasPrefix(absPath, absBase+string(os.PathSeparator)) && absPath != absBase {
 		return "", false
 	}
+
 	return absPath, true
+}
+
+// SafeFilePath is a convenience method that combines FilePath with SafePath validation
+func (s *Storage) SafeFilePath(repoType, namespace, name, revision, filePath string) (string, error) {
+	basePath := s.RevisionPath(repoType, namespace, name, revision)
+	safePath, ok := s.SafePath(basePath, filePath)
+	if !ok {
+		return "", fmt.Errorf("unsafe file path: %s", filePath)
+	}
+	return safePath, nil
+}
+
+// CalculateSHA256 calculates the SHA256 hash of a file
+func (s *Storage) CalculateSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func (s *Storage) CopyFile(src, dst string) error {
@@ -126,10 +177,11 @@ func (s *Storage) GetRepoSize(repoType, namespace, name string) (int64, error) {
 }
 
 type FileInfo struct {
-	Path     string `json:"path"`
-	Size     int64  `json:"size"`
-	IsDir    bool   `json:"is_dir"`
-	ModTime  int64  `json:"mod_time"`
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"is_dir"`
+	ModTime int64  `json:"mod_time"`
+	SHA256  string `json:"sha256,omitempty"`
 }
 
 func (s *Storage) ListFiles(repoType, namespace, name, revision string) ([]FileInfo, error) {
@@ -147,14 +199,23 @@ func (s *Storage) ListFiles(repoType, namespace, name, revision string) ([]FileI
 		if relPath == "." {
 			return nil
 		}
-		files = append(files, FileInfo{
+
+		fileInfo := FileInfo{
 			Path:    relPath,
 			Size:    info.Size(),
 			IsDir:   info.IsDir(),
 			ModTime: info.ModTime().Unix(),
-		})
+		}
+
+		// Calculate SHA256 for non-directory files
+		if !info.IsDir() {
+			if sha256, err := s.CalculateSHA256(path); err == nil {
+				fileInfo.SHA256 = sha256
+			}
+		}
+
+		files = append(files, fileInfo)
 		return nil
 	})
 	return files, err
 }
-

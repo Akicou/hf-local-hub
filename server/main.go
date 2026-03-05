@@ -1,6 +1,11 @@
 package main
 
 import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/Akicou/hf-local-hub/server/api"
 	"github.com/Akicou/hf-local-hub/server/config"
 	"github.com/Akicou/hf-local-hub/server/db"
@@ -38,12 +43,18 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}
+	defer func() {
+		if err := db.CloseDB(database); err != nil {
+			logger.Error("Failed to close database", zap.Error(err))
+		}
+	}()
 
 	server := api.New(cfg, database, logger)
 	router := server.SetupRouter()
 
+	var rateLimiter *middleware.RateLimiter
 	if cfg.RateLimit.Enabled {
-		rateLimiter := middleware.NewRateLimiter(cfg.RateLimit.RequestsMin, cfg.RateLimit.Burst)
+		rateLimiter = middleware.NewRateLimiter(cfg.RateLimit.RequestsMin, cfg.RateLimit.Burst)
 		router.Use(rateLimiter.Middleware())
 		logger.Info("Rate limiting enabled",
 			zap.Int("requests_per_minute", cfg.RateLimit.RequestsMin),
@@ -71,8 +82,35 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	logger.Info("Server listening", zap.String("addr", srv.Addr))
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Fatal("Server failed", zap.Error(err))
+	// Channel to listen for interrupt signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		logger.Info("Server listening", zap.String("addr", srv.Addr))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("Server failed", zap.Error(err))
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-quit
+	logger.Info("Shutting down server...")
+
+	// Create a deadline for shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Attempt graceful shutdown
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("Server forced to shutdown", zap.Error(err))
 	}
+
+	// Stop rate limiter cleanup goroutine
+	if rateLimiter != nil {
+		rateLimiter.Stop()
+	}
+
+	logger.Info("Server stopped")
 }

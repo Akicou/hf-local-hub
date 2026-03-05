@@ -71,7 +71,7 @@ def serve_background(
     cmd = [
         binary,
         "-port", str(port),
-        "-data-dir", data_dir,
+        "-data-dir", str(data_dir),
         "-log-level", log_level,
     ]
 

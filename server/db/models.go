@@ -31,3 +31,18 @@ type FileIndex struct {
 	SHA256    string    `json:"sha256"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// OAuthState stores OAuth state tokens for CSRF protection
+type OAuthState struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	State     string    `gorm:"uniqueIndex;not null" json:"state"`
+	Provider  string    `gorm:"index;not null" json:"provider"` // "hf", "github", etc.
+	Status    string    `gorm:"default:'pending'" json:"status"` // "pending", "used", "expired"
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// IsExpired checks if the OAuth state has expired
+func (s *OAuthState) IsExpired() bool {
+	return time.Now().After(s.ExpiresAt)
+}

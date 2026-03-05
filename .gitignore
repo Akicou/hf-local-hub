@@ -60,3 +60,8 @@ data/*.db-wal
 # Logs
 *.log
 logs/
+
+# Claude
+.claude/
+*.claude
+claude.md

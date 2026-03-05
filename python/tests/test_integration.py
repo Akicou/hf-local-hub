@@ -1,6 +1,6 @@
 """Integration tests for hf-local with huggingface_hub."""
 
-import os
+import socket
 import shutil
 from pathlib import Path
 
@@ -8,6 +8,15 @@ import pytest
 from huggingface_hub import HfApi, snapshot_download, hf_hub_download
 
 from hf_local import serve_background, set_endpoint, upload_folder
+
+
+def find_free_port():
+    """Find a free port on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('localhost', 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+        return port
 
 
 @pytest.fixture
@@ -27,9 +36,10 @@ def hf_api():
 
 def test_create_repo(temp_data_dir, hf_api):
     """Test creating a repository."""
-    endpoint = "http://localhost:8081"
+    port = find_free_port()
+    endpoint = f"http://localhost:{port}"
 
-    with serve_background(port=8081, data_dir=temp_data_dir):
+    with serve_background(port=port, data_dir=temp_data_dir):
         set_endpoint(endpoint)
 
         repo_id = "test-user/test-model"
@@ -47,9 +57,10 @@ def test_create_repo(temp_data_dir, hf_api):
 
 def test_upload_file(temp_data_dir, hf_api):
     """Test uploading a single file."""
-    endpoint = "http://localhost:8082"
+    port = find_free_port()
+    endpoint = f"http://localhost:{port}"
 
-    with serve_background(port=8082, data_dir=temp_data_dir):
+    with serve_background(port=port, data_dir=temp_data_dir):
         set_endpoint(endpoint)
 
         repo_id = "test-user/file-upload"
@@ -85,9 +96,10 @@ def test_upload_file(temp_data_dir, hf_api):
 
 def test_upload_folder(temp_data_dir, hf_api):
     """Test uploading a folder."""
-    endpoint = "http://localhost:8083"
+    port = find_free_port()
+    endpoint = f"http://localhost:{port}"
 
-    with serve_background(port=8083, data_dir=temp_data_dir):
+    with serve_background(port=port, data_dir=temp_data_dir):
         set_endpoint(endpoint)
 
         repo_id = "test-user/folder-upload"
@@ -129,9 +141,10 @@ def test_upload_folder(temp_data_dir, hf_api):
 
 def test_snapshot_download(temp_data_dir, hf_api):
     """Test snapshot_download."""
-    endpoint = "http://localhost:8084"
+    port = find_free_port()
+    endpoint = f"http://localhost:{port}"
 
-    with serve_background(port=8084, data_dir=temp_data_dir):
+    with serve_background(port=port, data_dir=temp_data_dir):
         set_endpoint(endpoint)
 
         repo_id = "test-user/snapshot-test"
@@ -163,9 +176,10 @@ def test_snapshot_download(temp_data_dir, hf_api):
 
 def test_list_repositories(temp_data_dir, hf_api):
     """Test listing repositories."""
-    endpoint = "http://localhost:8085"
+    port = find_free_port()
+    endpoint = f"http://localhost:{port}"
 
-    with serve_background(port=8085, data_dir=temp_data_dir):
+    with serve_background(port=port, data_dir=temp_data_dir):
         set_endpoint(endpoint)
 
         # Create multiple repos

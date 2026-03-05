@@ -1,10 +1,18 @@
 package middleware
 
 import (
+	"errors"
 	"io"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
+
+// ErrRequestTooLarge is returned when the request body exceeds the configured limit
+var ErrRequestTooLarge = errors.New("http: request body too large")
+
+// ErrFileTooLarge is returned when a file exceeds the configured limit
+var ErrFileTooLarge = errors.New("http: file too large")
 
 type LimitsConfig struct {
 	MaxFileSize    int64
@@ -16,20 +24,22 @@ type limitedReadCloser struct {
 	n      int64
 	limit  int64
 	exceed bool
+	err    error
 }
 
 func (lrc *limitedReadCloser) Read(p []byte) (int, error) {
 	if lrc.exceed {
-		return 0, io.ErrUnexpectedEOF
+		return 0, lrc.err
 	}
 
 	if lrc.n >= lrc.limit {
 		lrc.exceed = true
-		return 0, io.ErrUnexpectedEOF
+		lrc.err = ErrRequestTooLarge
+		return 0, lrc.err
 	}
 
 	max := len(p)
-	if int(lrc.limit-lrc.n) < max {
+	if int64(max) > lrc.limit-lrc.n {
 		max = int(lrc.limit - lrc.n)
 	}
 
@@ -38,7 +48,8 @@ func (lrc *limitedReadCloser) Read(p []byte) (int, error) {
 
 	if lrc.n >= lrc.limit {
 		lrc.exceed = true
-		return n, io.ErrUnexpectedEOF
+		lrc.err = ErrRequestTooLarge
+		return n, lrc.err
 	}
 
 	return n, err
@@ -51,7 +62,7 @@ func (lrc *limitedReadCloser) Close() error {
 func NewSizeLimits(cfg LimitsConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.ContentLength > cfg.MaxRequestSize {
-			c.JSON(413, gin.H{"error": "Request too large"})
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Request too large"})
 			c.Abort()
 			return
 		}
@@ -60,10 +71,17 @@ func NewSizeLimits(cfg LimitsConfig) gin.HandlerFunc {
 			c.Request.Body = &limitedReadCloser{
 				rc:    c.Request.Body,
 				limit: cfg.MaxFileSize,
+				err:   ErrRequestTooLarge,
 			}
 		}
 
 		c.Next()
+
+		// Check if we hit the limit during request processing
+		if errors.Is(c.Request.Context().Err(), ErrRequestTooLarge) {
+			if !c.Writer.Written() {
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "File too large"})
+			}
+		}
 	}
 }
-

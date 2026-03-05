@@ -1,10 +1,14 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,13 +23,13 @@ import (
 )
 
 type Server struct {
-	cfg           *config.Config
-	db            *gorm.DB
-	storage       *storage.Storage
-	logger        *zap.Logger
-	auth          *auth.Middleware
-	hfProvider    *auth.HFProvider
-	ldapProvider  *auth.LDAPProvider
+	cfg          *config.Config
+	db           *gorm.DB
+	storage      *storage.Storage
+	logger       *zap.Logger
+	auth         *auth.Middleware
+	hfProvider   *auth.HFProvider
+	ldapProvider *auth.LDAPProvider
 }
 
 func New(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Server {
@@ -37,7 +41,7 @@ func New(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Server {
 		auth:    auth.NewMiddleware(cfg.Auth.JWTSecret),
 	}
 	if cfg.Auth.EnableHFAuth {
-		server.hfProvider = auth.NewHFProvider(cfg.Auth.HFClientID, cfg.Auth.HFClientSecret, cfg.Auth.HFCallbackURL, server.auth)
+		server.hfProvider = auth.NewHFProvider(cfg.Auth.HFClientID, cfg.Auth.HFClientSecret, cfg.Auth.HFCallbackURL, server.auth, db, logger)
 	}
 	if cfg.Auth.EnableLDAP {
 		server.ldapProvider = auth.NewLDAPProvider(cfg.Auth.LDAPServer, cfg.Auth.LDAPPort, cfg.Auth.LDAPBindDN, cfg.Auth.LDAPBindPass, cfg.Auth.LDAPBaseDN, cfg.Auth.LDAPFilter)
@@ -353,6 +357,7 @@ func (s *Server) Commit(c *gin.Context) {
 			Path string `json:"path" binding:"required"`
 			Size int64  `json:"size"`
 			LFS  bool   `json:"lfs"`
+			SHA  string `json:"sha"`
 		} `json:"files" binding:"required"`
 	}
 
@@ -379,6 +384,7 @@ func (s *Server) Commit(c *gin.Context) {
 			Path:     f.Path,
 			Size:     f.Size,
 			LFS:      f.LFS,
+			SHA256:   f.SHA,
 		}
 		if err := s.db.Create(&fileIndex).Error; err != nil {
 			s.logger.Error("failed to create file index", zap.Error(err))
@@ -388,10 +394,208 @@ func (s *Server) Commit(c *gin.Context) {
 	c.JSON(http.StatusCreated, commit)
 }
 
-func (s *Server) LFSInfo(c *gin.Context) {
+// LFSBatchRequest represents a batch request for LFS objects
+type LFSBatchRequest struct {
+	Operation string `json:"operation"`
+	Transfers []string `json:"transfers,omitempty"`
+	Objects   []struct {
+		OID   string `json:"oid"`
+		Size  int64  `json:"size"`
+	} `json:"objects"`
+	Ref struct {
+		Name string `json:"name"`
+	} `json:"ref,omitempty"`
+}
+
+// LFSBatchResponse represents a batch response for LFS objects
+type LFSBatchResponse struct {
+	Transfer string            `json:"transfer,omitempty"`
+	Objects  []LFSObjectResponse `json:"objects"`
+}
+
+// LFSObjectResponse represents a single LFS object response
+type LFSObjectResponse struct {
+	OID     string            `json:"oid"`
+	Size    int64             `json:"size"`
+	Actions map[string]LFSAction `json:"actions,omitempty"`
+	Error   *LFSObjectError   `json:"error,omitempty"`
+}
+
+// LFSAction represents an LFS action (download/upload)
+type LFSAction struct {
+	Href   string            `json:"href"`
+	Header map[string]string `json:"header,omitempty"`
+	Expires string          `json:"expires,omitempty"`
+}
+
+// LFSObjectError represents an LFS object error
+type LFSObjectError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (s *Server) LFSBatch(c *gin.Context) {
+	repoID := c.Param("repo_id")
+
+	var req LFSBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	response := LFSBatchResponse{
+		Transfer: "basic",
+		Objects:  make([]LFSObjectResponse, 0, len(req.Objects)),
+	}
+
+	for _, obj := range req.Objects {
+		lfsPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, "lfs", obj.OID)
+
+		objResp := LFSObjectResponse{
+			OID:  obj.OID,
+			Size: obj.Size,
+		}
+
+		if req.Operation == "download" {
+			if s.storage.FileExists(lfsPath) {
+				// Verify the file size matches
+				if info, err := os.Stat(lfsPath); err == nil && info.Size() == obj.Size {
+					objResp.Actions = map[string]LFSAction{
+						"download": {
+							Href: fmt.Sprintf("/api/repos/%s/lfs/objects/%s", repoID, obj.OID),
+						},
+					}
+				} else {
+					objResp.Error = &LFSObjectError{
+						Code:    404,
+						Message: "Object not found or size mismatch",
+					}
+				}
+			} else {
+				objResp.Error = &LFSObjectError{
+					Code:    404,
+					Message: "Object not found",
+				}
+			}
+		} else if req.Operation == "upload" {
+			// For upload, provide the upload URL
+			objResp.Actions = map[string]LFSAction{
+				"upload": {
+					Href: fmt.Sprintf("/api/repos/%s/lfs/objects/%s", repoID, obj.OID),
+					Header: map[string]string{
+						"Content-Type": "application/octet-stream",
+					},
+				},
+			}
+		}
+
+		response.Objects = append(response.Objects, objResp)
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (s *Server) LFSUploadObject(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	oid := c.Param("oid")
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	// Read the body and calculate SHA256
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	// Calculate SHA256
+	hash := sha256.Sum256(body)
+	calculatedOID := hex.EncodeToString(hash[:])
+
+	// Verify OID matches
+	if calculatedOID != oid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "OID mismatch"})
+		return
+	}
+
+	// Save the file
+	lfsPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, "lfs", oid)
+	if err := s.storage.EnsureDir(filepath.Dir(lfsPath)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory"})
+		return
+	}
+
+	if err := os.WriteFile(lfsPath, body, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"lfs": false,
-		"size": 0,
+		"oid":  oid,
+		"size": len(body),
+	})
+}
+
+func (s *Server) LFSDownloadObject(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	oid := c.Param("oid")
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	lfsPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, "lfs", oid)
+	if !s.storage.FileExists(lfsPath) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
+		return
+	}
+
+	c.File(lfsPath)
+}
+
+func (s *Server) LFSInfo(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	oid := c.Query("oid")
+
+	if oid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "OID parameter required"})
+		return
+	}
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	lfsPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, "lfs", oid)
+	if !s.storage.FileExists(lfsPath) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found", "lfs": false})
+		return
+	}
+
+	info, err := os.Stat(lfsPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stat file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"lfs":  true,
+		"size": info.Size(),
+		"oid":  oid,
 	})
 }
 
@@ -430,12 +634,98 @@ func (s *Server) UploadFile(c *gin.Context) {
 	}
 
 	targetPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, revision, filePath)
+	if err := s.storage.EnsureDir(filepath.Dir(targetPath)); err != nil {
+		s.logger.Error("failed to create directory", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory"})
+		return
+	}
+
 	if err := c.SaveUploadedFile(file, targetPath); err != nil {
 		s.logger.Error("failed to save file", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"path": filePath, "size": file.Size})
+	// Calculate SHA256 for the uploaded file
+	src, err := file.Open()
+	if err != nil {
+		s.logger.Error("failed to open uploaded file", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process file"})
+		return
+	}
+	defer src.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, src); err != nil {
+		s.logger.Error("failed to calculate hash", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate hash"})
+		return
+	}
+	sha256Hash := hex.EncodeToString(hash.Sum(nil))
+
+	s.logger.Info("File uploaded successfully",
+		zap.String("path", filePath),
+		zap.Int64("size", file.Size),
+		zap.String("sha256", sha256Hash),
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"path":   filePath,
+		"size":   file.Size,
+		"sha256": sha256Hash,
+	})
 }
 
+// LFSPointer represents an LFS pointer file
+type LFSPointer struct {
+	Version   string `json:"version"`
+	Algorithm string `json:"algorithm"`
+	OID       string `json:"oid"`
+	Size      int64  `json:"size"`
+}
+
+func (s *Server) UploadLFSPointer(c *gin.Context) {
+	repoID := c.Param("repo_id")
+	revision := c.DefaultQuery("revision", "main")
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	var pointer LFSPointer
+	if err := c.ShouldBindJSON(&pointer); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid pointer"})
+		return
+	}
+
+	// Verify the LFS object exists
+	lfsPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, "lfs", pointer.OID)
+	if !s.storage.FileExists(lfsPath) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "LFS object not found"})
+		return
+	}
+
+	// Create a pointer file
+	filePath := c.PostForm("path")
+	if filePath == "" {
+		filePath = "pointer.lfs"
+	}
+
+	pointerContent := fmt.Sprintf("version %s\nalgo %s\noid %s\nsize %d",
+		pointer.Version, pointer.Algorithm, pointer.OID, pointer.Size)
+
+	targetPath := s.storage.FilePath(repo.Type, repo.Namespace, repo.Name, revision, filePath)
+	if err := s.storage.EnsureDir(filepath.Dir(targetPath)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory"})
+		return
+	}
+
+	if err := os.WriteFile(targetPath, []byte(pointerContent), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save pointer file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"path": filePath, "lfs": true})
+}

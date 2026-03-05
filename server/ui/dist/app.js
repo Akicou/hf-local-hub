@@ -1,3 +1,8 @@
+/**
+ * HF Local Hub - Modern Web Application
+ * A professional, non-vibecoded UI for managing ML repositories
+ */
+
 class App {
   constructor() {
     this.currentTab = 'models';
@@ -5,13 +10,15 @@ class App {
     this.repositories = [];
     this.filters = { type: 'all', privacy: 'all' };
     this.authMethods = { token: true, hf: false, ldap: false };
+    this.searchQuery = '';
+    this.isLoading = false;
     this.init();
   }
 
   async init() {
     await this.fetchAuthConfig();
     this.bindNav();
-    this.bindSidebar();
+    this.bindFilters();
     this.bindModal();
     this.bindSearch();
     this.updateAuthUI();
@@ -25,27 +32,33 @@ class App {
         const cfg = await res.json();
         this.authMethods = cfg;
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to fetch auth config:', err);
+    }
   }
 
   bindNav() {
     document.querySelectorAll('.nav-link[data-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
     });
-    document.getElementById('loginBtn').addEventListener('click', () =>
+
+    document.getElementById('loginBtn')?.addEventListener('click', () =>
       this.token ? this.logout() : this.login()
     );
-    document.getElementById('createRepoBtn').addEventListener('click', () => this.showModal());
+
+    document.getElementById('createRepoBtn')?.addEventListener('click', () => this.showModal());
   }
 
-  bindSidebar() {
-    document.querySelectorAll('.filter-pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        const { filter, value } = pill.dataset;
+  bindFilters() {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { filter, value } = btn.dataset;
         this.filters[filter] = value;
-        document.querySelectorAll(`.filter-pill[data-filter="${filter}"]`).forEach(p =>
-          p.classList.toggle('active', p === pill)
+
+        document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`).forEach(p =>
+          p.classList.toggle('active', p === btn)
         );
+
         this.renderRepositories();
       });
     });
@@ -53,20 +66,30 @@ class App {
 
   bindModal() {
     const overlay = document.getElementById('repoModal');
+    if (!overlay) return;
+
     const close = () => {
       overlay.classList.remove('show');
-      document.getElementById('createRepoForm').reset();
+      document.getElementById('createRepoForm')?.reset();
     };
-    document.getElementById('modalClose').addEventListener('click', close);
-    document.getElementById('modalCancel').addEventListener('click', close);
+
+    document.getElementById('modalClose')?.addEventListener('click', close);
+    document.getElementById('modalCancel')?.addEventListener('click', close);
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-    document.getElementById('modalSubmit').addEventListener('click', () => this.createRepo());
+    document.getElementById('modalSubmit')?.addEventListener('click', () => this.createRepo());
   }
 
   bindSearch() {
-    document.getElementById('searchInput').addEventListener('input', e => {
-      this.searchQuery = e.target.value;
-      this.renderRepositories();
+    const searchInput = document.getElementById('searchInput');
+    if (!searchInput) return;
+
+    let debounceTimer;
+    searchInput.addEventListener('input', e => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        this.searchQuery = e.target.value;
+        this.renderRepositories();
+      }, 300);
     });
   }
 
@@ -75,22 +98,45 @@ class App {
     document.querySelectorAll('.nav-link[data-tab]').forEach(btn =>
       btn.classList.toggle('active', btn.dataset.tab === tab)
     );
-    document.getElementById('pageTitle').textContent =
-      tab.charAt(0).toUpperCase() + tab.slice(1);
+
+    const pageTitle = document.getElementById('pageTitle');
+    if (pageTitle) {
+      pageTitle.textContent = tab.charAt(0).toUpperCase() + tab.slice(1);
+    }
+
     this.loadRepositories();
   }
 
   async loadRepositories() {
+    this.isLoading = true;
+    this.renderSkeletons();
+
     const endpoint = this.currentTab === 'models' ? '/api/models/' : '/api/datasets/';
     try {
       const res = await fetch(endpoint);
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       this.repositories = await res.json() || [];
-    } catch {
+    } catch (err) {
+      console.error('Failed to load repositories:', err);
       this.repositories = [];
       this.showToast('Failed to load repositories', 'error');
+    } finally {
+      this.isLoading = false;
     }
+
     this.renderRepositories();
+  }
+
+  renderSkeletons() {
+    const container = document.getElementById('repoList');
+    if (!container) return;
+
+    container.innerHTML = Array(4).fill(0).map(() => `
+      <div class="repo-card">
+        <div class="skeleton" style="height:80px;margin-bottom:16px"></div>
+        <div class="skeleton" style="height:20px;width:60%"></div>
+      </div>
+    `).join('');
   }
 
   filtered() {
@@ -98,8 +144,15 @@ class App {
       if (this.filters.type !== 'all' && r.type !== this.filters.type) return false;
       if (this.filters.privacy === 'public' && r.private) return false;
       if (this.filters.privacy === 'private' && !r.private) return false;
+
       const q = (this.searchQuery || '').toLowerCase();
-      if (q && !r.name.toLowerCase().includes(q) && !r.namespace.toLowerCase().includes(q)) return false;
+      if (q) {
+        const nameMatch = r.name?.toLowerCase().includes(q);
+        const nsMatch = r.namespace?.toLowerCase().includes(q);
+        const repoIdMatch = r.repo_id?.toLowerCase().includes(q);
+        if (!nameMatch && !nsMatch && !repoIdMatch) return false;
+      }
+
       return true;
     });
   }
@@ -107,19 +160,22 @@ class App {
   renderRepositories() {
     const list = this.filtered();
     const count = document.getElementById('repoCount');
-    count.textContent = list.length.toLocaleString();
+    if (count) count.textContent = list.length.toLocaleString();
 
     const container = document.getElementById('repoList');
+    if (!container) return;
+
     if (list.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <p>No repositories found</p>
+          <div class="empty-icon">📦</div>
+          <h2>No repositories found</h2>
+          <p>Get started by creating your first repository</p>
+          <button class="btn btn-primary" onclick="app.showModal()">Create Repository</button>
         </div>`;
       return;
     }
+
     container.innerHTML = list.map(r => this.cardHTML(r)).join('');
   }
 
@@ -128,10 +184,13 @@ class App {
     const badgeClass = { model: 'badge-model', dataset: 'badge-dataset', space: 'badge-space' };
     const iconClass = { model: 'icon-model', dataset: 'icon-dataset', space: 'icon-space' };
     const t = r.type || 'model';
+
     const date = r.created_at
       ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
+
     const repoId = r.repo_id || `${r.namespace}/${r.name}`;
+
     return `
       <a href="/r/${repoId}" class="repo-card" style="text-decoration:none;color:inherit">
         <div class="repo-card-top">
@@ -149,7 +208,7 @@ class App {
   }
 
   esc(s) {
-    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   showModal() {
@@ -239,4 +298,7 @@ class App {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => new App());
+// Initialize app when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new App();
+});

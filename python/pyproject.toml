@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "hf-local-hub"
 description = "Lightweight local Hugging Face Hub server and client"
-readme = "../README.md"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "hf-local-hub", email = "maintainer@hf-local-hub.com" }]
@@ -32,10 +32,10 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/lyani/hf-local-hub"
-Documentation = "https://github.com/lyani/hf-local-hub#readme"
-Repository = "https://github.com/lyani/hf-local-hub"
-Issues = "https://github.com/lyani/hf-local-hub/issues"
+Homepage = "https://github.com/Akicou/hf-local-hub"
+Documentation = "https://github.com/Akicou/hf-local-hub#readme"
+Repository = "https://github.com/Akicou/hf-local-hub"
+Issues = "https://github.com/Akicou/hf-local-hub/issues"
 
 [project.optional-dependencies]
 serve = ["hatchling"]

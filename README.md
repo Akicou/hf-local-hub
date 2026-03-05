@@ -2,7 +2,7 @@
 
 Lightweight local Hugging Face Hub server and client - run HF Hub entirely on your machine.
 
-![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)
+![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
@@ -38,7 +38,7 @@ Lightweight local Hugging Face Hub server and client - run HF Hub entirely on yo
 **Go Binary:**
 ```bash
 # Clone repository
-git clone https://github.com/lyani/hf-local-hub.git
+git clone https://github.com/Akicou/hf-local-hub.git
 cd hf-local-hub
 
 # Build server
@@ -48,7 +48,7 @@ make server
 **Python Package:**
 ```bash
 # Clone and install
-git clone https://github.com/lyani/hf-local-hub.git
+git clone https://github.com/Akicou/hf-local-hub.git
 cd hf-local-hub/python
 pip install -e .
 ```

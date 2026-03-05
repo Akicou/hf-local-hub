@@ -19,23 +19,44 @@ def find_binary() -> str:
     """Find the hf-local Go binary."""
     binary_name = "hf-local.exe" if os.name == "nt" else "hf-local"
 
+    # Search paths - prioritize Go binary locations over Python CLI
     paths = [
-        Path(__file__).parent.parent / binary_name,
+        # Package root (for pip install -e .)
+        Path(__file__).parent.parent.parent.parent / "server" / binary_name,
+        # Parent of src (development layout)
         Path(__file__).parent.parent.parent / "server" / binary_name,
+        # Same directory as package (wheel layout)
+        Path(__file__).parent.parent / binary_name,
+        # Current working directory
+        Path.cwd() / binary_name,
+        Path.cwd() / "server" / binary_name,
     ]
 
     for path in paths:
         if path.exists():
-            return str(path)
+            return str(path.resolve())
 
-    if shutil.which(binary_name):
-        return binary_name
+    # Check PATH but verify it's not the Python CLI by checking help output
+    path_binary = shutil.which(binary_name)
+    if path_binary:
+        # Verify it's the Go binary by checking if it accepts --port flag
+        try:
+            result = subprocess.run(
+                [path_binary, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            # Go binary uses standard flag package which shows "Usage:" with flags
+            if "Usage:" in result.stdout or "Usage:" in result.stderr:
+                return path_binary
+        except Exception:
+            pass
 
     raise FileNotFoundError(
-        f"hf-local binary not found. Searched in:\n"
-        f"  - {paths[0]}\n"
-        f"  - {paths[1]}\n"
-        "Build with 'make server' or add to PATH.",
+        f"hf-local Go binary not found. Searched in:\n"
+        + "\n".join(f"  - {p}" for p in paths)
+        + "\nBuild with 'make server' or add Go binary to PATH.",
     )
 
 

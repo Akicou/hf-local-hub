@@ -1,6 +1,6 @@
 module github.com/Akicou/hf-local-hub/server
 
-go 1.25.1
+go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.12.0
