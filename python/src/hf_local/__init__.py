@@ -9,7 +9,7 @@ from typing import Optional
 from .cli import app as cli
 from .cli import find_binary
 
-__version__ = "0.2.0"
+__version__ = "3.0.0"
 __all__ = ["cli", "serve_background", "set_endpoint", "upload_folder", "login", "logout"]
 
 
