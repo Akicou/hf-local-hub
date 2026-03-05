@@ -32,16 +32,16 @@ type Server struct {
 	ldapProvider *auth.LDAPProvider
 }
 
-func New(cfg *config.Config, db *gorm.DB, logger *zap.Logger) *Server {
+func New(cfg *config.Config, database *gorm.DB, logger *zap.Logger) *Server {
 	server := &Server{
 		cfg:     cfg,
-		db:      db,
+		db:      database,
 		storage: storage.New(cfg.Storage.ModelsPath, cfg.Storage.DatasetsPath, cfg.Storage.SpacesPath),
 		logger:  logger,
-		auth:    auth.NewMiddleware(cfg.Auth.JWTSecret),
+		auth:    auth.NewMiddleware(cfg.Auth.JWTSecret, database),
 	}
 	if cfg.Auth.EnableHFAuth {
-		server.hfProvider = auth.NewHFProvider(cfg.Auth.HFClientID, cfg.Auth.HFClientSecret, cfg.Auth.HFCallbackURL, server.auth, db, logger)
+		server.hfProvider = auth.NewHFProvider(cfg.Auth.HFClientID, cfg.Auth.HFClientSecret, cfg.Auth.HFCallbackURL, server.auth, database, logger)
 	}
 	if cfg.Auth.EnableLDAP {
 		server.ldapProvider = auth.NewLDAPProvider(cfg.Auth.LDAPServer, cfg.Auth.LDAPPort, cfg.Auth.LDAPBindDN, cfg.Auth.LDAPBindPass, cfg.Auth.LDAPBaseDN, cfg.Auth.LDAPFilter)
@@ -55,34 +55,9 @@ func (s *Server) Health(c *gin.Context) {
 
 func (s *Server) AuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"token": s.cfg.Auth.EnableTokenAuth,
 		"hf":    s.cfg.Auth.EnableHFAuth,
 		"ldap":  s.cfg.Auth.EnableLDAP,
 	})
-}
-
-func (s *Server) TokenLogin(c *gin.Context) {
-	var req struct {
-		Token string `json:"token" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if s.cfg.Token != "" && req.Token != s.cfg.Token {
-		c.JSON(401, gin.H{"error": "Invalid token"})
-		return
-	}
-
-	token, err := s.auth.GenerateToken("token-user", "Token User", "token")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"token": token, "user": gin.H{"id": "token-user", "name": "Token User"}})
 }
 
 func (s *Server) HFLogin(c *gin.Context) {
@@ -119,12 +94,186 @@ func (s *Server) LDAPLogin(c *gin.Context) {
 		c.JSON(401, gin.H{"error": "Invalid credentials"})
 		return
 	}
+
+	// Create or update user in database
+	s.ensureUserExists(userID, req.Username, "ldap")
+
 	token, err := s.auth.GenerateToken(userID, req.Username, "ldap")
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to generate token"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"token": token, "user": gin.H{"id": userID, "name": req.Username}})
+}
+
+// ensureUserExists creates a user record if it doesn't exist
+func (s *Server) ensureUserExists(userID, username, provider string) {
+	var user db.User
+	if err := s.db.Where("user_id = ?", userID).First(&user).Error; err != nil {
+		// User doesn't exist, create one
+		user = db.User{
+			UserID:   userID,
+			Username: username,
+			Provider: provider,
+			IsActive: true,
+		}
+		s.db.Create(&user)
+	}
+}
+
+// CreateAPIToken creates a new API token for the authenticated user
+func (s *Server) CreateAPIToken(c *gin.Context) {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Read        bool   `json:"read"`
+		Write       bool   `json:"write"`
+		Delete      bool   `json:"delete"`
+		Admin       bool   `json:"admin"`
+		ExpiresIn   int    `json:"expires_in"` // Expiration in hours, 0 = no expiration
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	perms := db.TokenPermissions{
+		Read:   req.Read,
+		Write:  req.Write,
+		Delete: req.Delete,
+		Admin:  req.Admin,
+	}
+
+	var expiresAt *time.Time
+	if req.ExpiresIn > 0 {
+		exp := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
+		expiresAt = &exp
+	}
+
+	apiToken, err := s.auth.GenerateAPIToken(userID, req.Name, perms, expiresAt)
+	if err != nil {
+		s.logger.Error("Failed to generate API token", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate API token"})
+		return
+	}
+
+	s.logger.Info("API token created", zap.String("user_id", userID), zap.String("name", req.Name))
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":         apiToken.ID,
+		"token":      apiToken.Token,
+		"name":       apiToken.Name,
+		"permissions": perms,
+		"expires_at": apiToken.ExpiresAt,
+		"created_at": apiToken.CreatedAt,
+	})
+}
+
+// ListAPITokens lists all API tokens for the authenticated user
+func (s *Server) ListAPITokens(c *gin.Context) {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	tokens, err := s.auth.ListAPITokens(userID)
+	if err != nil {
+		s.logger.Error("Failed to list API tokens", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list API tokens"})
+		return
+	}
+
+	// Mask the actual token values for security
+	type TokenResponse struct {
+		ID         uint       `json:"id"`
+		Name       string     `json:"name"`
+		Token      string     `json:"token"` // Masked
+		ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+		LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+		CreatedAt  time.Time  `json:"created_at"`
+	}
+
+	response := make([]TokenResponse, len(tokens))
+	for i, t := range tokens {
+		// Show only last 8 characters of token
+		maskedToken := "hf_***" + t.Token[len(t.Token)-8:]
+		response[i] = TokenResponse{
+			ID:         t.ID,
+			Name:       t.Name,
+			Token:      maskedToken,
+			ExpiresAt:  t.ExpiresAt,
+			LastUsedAt: t.LastUsedAt,
+			CreatedAt:  t.CreatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"tokens": response})
+}
+
+// DeleteAPIToken deletes an API token
+func (s *Server) DeleteAPIToken(c *gin.Context) {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	tokenID := c.Param("id")
+	if tokenID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Token ID required"})
+		return
+	}
+
+	if err := s.auth.DeleteAPIToken(userID, tokenID); err != nil {
+		if err.Error() == "token not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Token not found"})
+			return
+		}
+		s.logger.Error("Failed to delete API token", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API token"})
+		return
+	}
+
+	s.logger.Info("API token deleted", zap.String("user_id", userID), zap.String("token_id", tokenID))
+	c.JSON(http.StatusOK, gin.H{"message": "Token deleted"})
+}
+
+// GetCurrentUser returns the current authenticated user's info
+func (s *Server) GetCurrentUser(c *gin.Context) {
+	userID := auth.GetUserID(c)
+	username := auth.GetUsername(c)
+
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	// Get user from database if available
+	var user db.User
+	userExists := true
+	if err := s.db.Where("user_id = ?", userID).First(&user).Error; err != nil {
+		userExists = false
+	}
+
+	response := gin.H{
+		"id":       userID,
+		"username": username,
+	}
+
+	if userExists {
+		response["email"] = user.Email
+		response["is_admin"] = user.IsAdmin
+		response["created_at"] = user.CreatedAt
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) CreateRepo(c *gin.Context) {
@@ -167,12 +316,15 @@ func (s *Server) CreateRepo(c *gin.Context) {
 				req.Name = parts[1]
 			}
 		} else if len(parts) == 1 {
-			// Just a name, use "user" as default namespace
+			// Just a name, use user's ID as namespace
 			if req.Name == "" {
 				req.Name = parts[0]
 			}
 			if req.Namespace == "" {
-				req.Namespace = "user"
+				req.Namespace = auth.GetUserID(c)
+				if req.Namespace == "" {
+					req.Namespace = "user"
+				}
 			}
 		}
 	}
@@ -774,4 +926,54 @@ func (s *Server) UploadLFSPointer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"path": filePath, "lfs": true})
+}
+
+// UIPage serves the main UI page, requiring authentication
+func (s *Server) UIPage(c *gin.Context) {
+	// Check if user is authenticated
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		// Redirect to login or show login page
+		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
+			"authConfig": gin.H{
+				"hf":   s.cfg.Auth.EnableHFAuth,
+				"ldap": s.cfg.Auth.EnableLDAP,
+			},
+		})
+		return
+	}
+
+	// Serve the main UI
+	c.FileFromFS("index.html", s.uiFS())
+}
+
+func (s *Server) uiFS() http.FileSystem {
+	// This is handled by the embedded FS in router.go
+	return nil
+}
+
+// DeleteRepo deletes a repository
+func (s *Server) DeleteRepo(c *gin.Context) {
+	repoID := c.Param("repo_id")
+
+	var repo db.Repo
+	if err := s.db.Where("repo_id = ?", repoID).First(&repo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found"})
+		return
+	}
+
+	// Delete from database
+	if err := s.db.Delete(&repo).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete repository"})
+		return
+	}
+
+	// Delete files from storage
+	repoPath := s.storage.RepoPath(repo.Type, repo.Namespace, repo.Name)
+	if err := os.RemoveAll(repoPath); err != nil {
+		s.logger.Warn("Failed to remove repo files", zap.Error(err))
+	}
+
+	s.logger.Info("Repository deleted", zap.String("repo_id", repoID))
+	c.JSON(http.StatusOK, gin.H{"message": "Repository deleted"})
 }

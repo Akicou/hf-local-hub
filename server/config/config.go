@@ -64,19 +64,29 @@ func init() {
 }
 
 type AuthConfig struct {
-	JWTSecret       string
-	EnableTokenAuth bool
-	EnableHFAuth    bool
-	HFClientID      string
-	HFClientSecret  string
-	HFCallbackURL   string
-	EnableLDAP      bool
-	LDAPServer      string
-	LDAPPort        int
-	LDAPBindDN      string
-	LDAPBindPass    string
-	LDAPBaseDN      string
-	LDAPFilter      string
+	JWTSecret      string
+	EnableHFAuth   bool
+	HFClientID     string
+	HFClientSecret string
+	HFCallbackURL  string
+	EnableLDAP     bool
+	LDAPServer     string
+	LDAPPort       int
+	LDAPBindDN     string
+	LDAPBindPass   string
+	LDAPBaseDN     string
+	LDAPFilter     string
+}
+
+type DatabaseConfig struct {
+	Type     string // "sqlite" or "postgres"
+	Path     string // SQLite database path
+	Host     string // PostgreSQL host
+	Port     int    // PostgreSQL port
+	User     string // PostgreSQL user
+	Password string // PostgreSQL password
+	Database string // PostgreSQL database name
+	SSLMode  string // PostgreSQL SSL mode
 }
 
 type StorageConfig struct {
@@ -99,13 +109,13 @@ type RateLimitConfig struct {
 }
 
 type Config struct {
-	Port      int
-	DataDir   string
-	Token     string
-	LogLevel  string
-	Auth      AuthConfig
-	Storage   StorageConfig
-	Limits    LimitsConfig
+	Port     int
+	DataDir  string
+	LogLevel string
+	Auth     AuthConfig
+	Database DatabaseConfig
+	Storage  StorageConfig
+	Limits   LimitsConfig
 	RateLimit RateLimitConfig
 }
 
@@ -114,10 +124,19 @@ func Load() *Config {
 
 	flag.IntVar(&cfg.Port, "port", 8080, "Server port")
 	flag.StringVar(&cfg.DataDir, "data-dir", "./data", "Data storage directory")
-	flag.StringVar(&cfg.Token, "token", "", "Optional authentication token")
 	flag.StringVar(&cfg.LogLevel, "log-level", "info", "Log level")
 
-	flag.BoolVar(&cfg.Auth.EnableTokenAuth, "auth-token", false, "Enable token authentication")
+	// Database flags
+	flag.StringVar(&cfg.Database.Type, "db-type", "sqlite", "Database type (sqlite or postgres)")
+	flag.StringVar(&cfg.Database.Path, "db-path", "", "SQLite database path (default: data-dir/hf-local.db)")
+	flag.StringVar(&cfg.Database.Host, "db-host", "localhost", "PostgreSQL host")
+	flag.IntVar(&cfg.Database.Port, "db-port", 5432, "PostgreSQL port")
+	flag.StringVar(&cfg.Database.User, "db-user", "postgres", "PostgreSQL user")
+	flag.StringVar(&cfg.Database.Password, "db-password", "", "PostgreSQL password")
+	flag.StringVar(&cfg.Database.Database, "db-name", "hf_local_hub", "PostgreSQL database name")
+	flag.StringVar(&cfg.Database.SSLMode, "db-sslmode", "disable", "PostgreSQL SSL mode")
+
+	// Auth flags (removed simple token auth, kept HF OAuth and LDAP)
 	flag.BoolVar(&cfg.Auth.EnableHFAuth, "auth-hf", false, "Enable Hugging Face OAuth")
 	flag.BoolVar(&cfg.Auth.EnableLDAP, "auth-ldap", false, "Enable LDAP authentication")
 
@@ -163,18 +182,41 @@ func (cfg *Config) loadFromEnv() {
 	if dir := os.Getenv("HF_LOCAL_DATA_DIR"); dir != "" {
 		cfg.DataDir = dir
 	}
-	if token := os.Getenv("HF_LOCAL_TOKEN"); token != "" {
-		cfg.Token = token
-	}
 	if level := os.Getenv("HF_LOCAL_LOG_LEVEL"); level != "" {
 		cfg.LogLevel = level
 	}
 	if secret := os.Getenv("HF_LOCAL_JWT_SECRET"); secret != "" {
 		cfg.Auth.JWTSecret = secret
 	}
-	if os.Getenv("HF_LOCAL_AUTH_TOKEN") == "true" {
-		cfg.Auth.EnableTokenAuth = true
+
+	// Database configuration from env
+	if dbType := os.Getenv("HF_LOCAL_DB_TYPE"); dbType != "" {
+		cfg.Database.Type = dbType
 	}
+	if dbPath := os.Getenv("HF_LOCAL_DB_PATH"); dbPath != "" {
+		cfg.Database.Path = dbPath
+	}
+	if host := os.Getenv("HF_LOCAL_DB_HOST"); host != "" {
+		cfg.Database.Host = host
+	}
+	if port := os.Getenv("HF_LOCAL_DB_PORT"); port != "" {
+		if p, err := strconv.Atoi(port); err == nil {
+			cfg.Database.Port = p
+		}
+	}
+	if user := os.Getenv("HF_LOCAL_DB_USER"); user != "" {
+		cfg.Database.User = user
+	}
+	if pass := os.Getenv("HF_LOCAL_DB_PASSWORD"); pass != "" {
+		cfg.Database.Password = pass
+	}
+	if db := os.Getenv("HF_LOCAL_DB_NAME"); db != "" {
+		cfg.Database.Database = db
+	}
+	if sslMode := os.Getenv("HF_LOCAL_DB_SSLMODE"); sslMode != "" {
+		cfg.Database.SSLMode = sslMode
+	}
+
 	if os.Getenv("HF_LOCAL_AUTH_HF") == "true" {
 		cfg.Auth.EnableHFAuth = true
 	}
@@ -255,6 +297,9 @@ func (cfg *Config) loadFromEnv() {
 }
 
 func (cfg *Config) setDefaults() {
+	if cfg.Database.Path == "" && cfg.Database.Type == "sqlite" {
+		cfg.Database.Path = cfg.DataDir + "/hf-local.db"
+	}
 	if cfg.Storage.ModelsPath == "" {
 		cfg.Storage.ModelsPath = cfg.DataDir + "/storage/models"
 	}
@@ -277,19 +322,15 @@ func generateRandomSecret() (string, error) {
 
 func (cfg *Config) setJWTSecret() {
 	if cfg.Auth.JWTSecret == "" {
-		if cfg.Token != "" {
-			cfg.Auth.JWTSecret = cfg.Token
+		// Generate a random secret for development/testing
+		// In production, always set HF_LOCAL_JWT_SECRET environment variable
+		secret, err := generateRandomSecret()
+		if err != nil {
+			log.Printf("Warning: Failed to generate random JWT secret: %v", err)
+			cfg.Auth.JWTSecret = "change-me-in-production"
 		} else {
-			// Generate a random secret for development/testing
-			// In production, always set HF_LOCAL_JWT_SECRET environment variable
-			secret, err := generateRandomSecret()
-			if err != nil {
-				log.Printf("Warning: Failed to generate random JWT secret: %v", err)
-				cfg.Auth.JWTSecret = "change-me-in-production"
-			} else {
-				cfg.Auth.JWTSecret = secret
-				log.Printf("Generated random JWT secret (set HF_LOCAL_JWT_SECRET for persistence)")
-			}
+			cfg.Auth.JWTSecret = secret
+			log.Printf("Generated random JWT secret (set HF_LOCAL_JWT_SECRET for persistence)")
 		}
 	}
 }

@@ -5,6 +5,8 @@ Complete API reference for hf-local-hub server and Python client.
 ## Table of Contents
 
 - [Server API](#server-api)
+- [Authentication](#authentication)
+- [API Token Management](#api-token-management)
 - [Python CLI](#python-cli)
 - [Python Library](#python-library)
 
@@ -14,7 +16,7 @@ Base URL: `http://localhost:8080`
 
 ### Health Check
 
-Check if server is running.
+Check if server is running. **Public endpoint.**
 
 ```http
 GET /health
@@ -29,7 +31,7 @@ GET /health
 
 ### Auth Config
 
-Get enabled authentication methods.
+Get enabled authentication methods. **Public endpoint.**
 
 ```http
 GET /auth/config
@@ -38,38 +40,16 @@ GET /auth/config
 **Response:**
 ```json
 {
-  "token": true,
-  "hf": false,
+  "hf": true,
   "ldap": false
 }
 ```
 
-### Token Login
+---
 
-Login with authentication token.
+## Authentication
 
-```http
-POST /api/auth/login
-Content-Type: application/json
-```
-
-**Request Body:**
-```json
-{
-  "token": "your-secret-token"
-}
-```
-
-**Response:**
-```json
-{
-  "token": "<jwt-token>",
-  "user": {
-    "id": "token-user",
-    "name": "Token User"
-  }
-}
-```
+All API endpoints (except `/health` and `/auth/config`) require authentication. Use either JWT tokens (from OAuth/LDAP login) or API tokens.
 
 ### HF OAuth Login
 
@@ -130,12 +110,135 @@ Content-Type: application/json
 }
 ```
 
+### Get Current User
+
+Get information about the currently authenticated user. **Requires authentication.**
+
+```http
+GET /api/user
+Authorization: Bearer <jwt-or-api-token>
+```
+
+**Response:**
+```json
+{
+  "id": "user-123",
+  "username": "John Doe",
+  "email": "john@example.com",
+  "is_admin": false,
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
+
+---
+
+## API Token Management
+
+Users can create API tokens with specific permissions for programmatic access. These tokens work like Hugging Face API tokens.
+
+### List API Tokens
+
+List all API tokens for the authenticated user. **Requires JWT authentication.**
+
+```http
+GET /api/tokens/
+Authorization: Bearer <jwt-token>
+```
+
+**Response:**
+```json
+{
+  "tokens": [
+    {
+      "id": 1,
+      "name": "My API Token",
+      "token": "hf_***xxxxxxxx",
+      "expires_at": "2026-04-05T00:00:00Z",
+      "last_used_at": "2026-03-05T10:00:00Z",
+      "created_at": "2026-03-05T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Create API Token
+
+Create a new API token with specified permissions. **Requires JWT authentication.**
+
+```http
+POST /api/tokens/
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "name": "My API Token",
+  "read": true,
+  "write": true,
+  "delete": false,
+  "admin": false,
+  "expires_in": 720
+}
+```
+
+**Parameters:**
+- `name` (string, required): Token name for identification
+- `read` (boolean): Can read repositories and files (default: false)
+- `write` (boolean): Can create/update repositories and files (default: false)
+- `delete` (boolean): Can delete repositories and files (default: false)
+- `admin` (boolean): Can manage users and tokens (default: false)
+- `expires_in` (int): Expiration time in hours (0 = no expiration)
+
+**Response:**
+```json
+{
+  "id": 1,
+  "token": "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "name": "My API Token",
+  "permissions": {
+    "read": true,
+    "write": true,
+    "delete": false,
+    "admin": false
+  },
+  "expires_at": "2026-04-05T00:00:00Z",
+  "created_at": "2026-03-05T00:00:00Z"
+}
+```
+
+**Note:** The full token is only shown once when created. Store it securely!
+
+### Delete API Token
+
+Delete an API token. **Requires JWT authentication.**
+
+```http
+DELETE /api/tokens/:id
+Authorization: Bearer <jwt-token>
+```
+
+**Response:**
+```json
+{
+  "message": "Token deleted"
+}
+```
+
+---
+
+## Repository Endpoints
+
+All repository endpoints require authentication.
+
 ### Create Repository
 
-Create a new repository.
+Create a new repository. **Requires `write` permission.**
 
 ```http
 POST /api/repos/create
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -160,84 +263,139 @@ Content-Type: application/json
   "type": "model",
   "private": false,
   "created_at": "2024-01-01T00:00:00Z",
-  "updated_at": "2024-01-01T00:00:00Z"
+  "updated_at": "2024-01-01T00:00:00Z",
+  "url": "http://localhost:8080/api/models/user/model-name"
 }
+```
+
+### List Repositories
+
+List all repositories. **Requires authentication.**
+
+```http
+GET /api/repos/
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `type` (string): Filter by type (`model` or `dataset`)
+
+### Get Repository
+
+Get details of a specific repository. **Requires authentication.**
+
+```http
+GET /api/repos/:repo_id
+Authorization: Bearer <token>
+```
+
+### Delete Repository
+
+Delete a repository. **Requires `delete` permission.**
+
+```http
+DELETE /api/repos/:repo_id
+Authorization: Bearer <token>
 ```
 
 ### List Models
 
-List all model repositories.
+List all model repositories. **Requires authentication.**
 
 ```http
-GET /api/models
+GET /api/models/
+Authorization: Bearer <token>
 ```
 
 **Response:**
 ```json
 [
   {
-    "id": 1,
-    "repo_id": "user/model-1",
+    "id": "user/model-1",
+    "modelId": "model-1",
     "namespace": "user",
-    "name": "model-1",
     "type": "model",
     "private": false,
-    "created_at": "2024-01-01T00:00:00Z",
-    "updated_at": "2024-01-01T00:00:00Z"
+    "createdAt": "2024-01-01T00:00:00.000000Z"
   }
 ]
 ```
 
-### Get Repository
+### Get Model
 
-Get details of a specific repository.
+Get details of a specific model. **Requires authentication.**
 
 ```http
 GET /api/models/:repo_id
+Authorization: Bearer <token>
 ```
 
-**Parameters:**
-- `repo_id` (path) - Repository ID (e.g., "user/model-name")
+### List Files
+
+List files in a repository. **Requires authentication.**
+
+```http
+GET /api/models/:repo_id/files
+Authorization: Bearer <token>
+```
 
 **Response:**
 ```json
 {
-  "id": 1,
-  "repo_id": "user/model-name",
-  "namespace": "user",
-  "name": "model-name",
-  "type": "model",
-  "private": false,
-  "created_at": "2024-01-01T00:00:00Z",
-  "updated_at": "2024-01-01T00:00:00Z"
+  "files": [
+    {
+      "path": "config.json",
+      "size": 1024,
+      "is_dir": false,
+      "mod_time": 1704067200
+    }
+  ],
+  "count": 1
+}
+```
+
+### Upload File
+
+Upload a file to a repository. **Requires `write` permission.**
+
+```http
+POST /api/repos/:repo_id/upload
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+**Form Data:**
+- `file`: File to upload
+- `path`: Target path in repository (optional, defaults to filename)
+
+**Query Parameters:**
+- `revision`: Git revision (default: "main")
+
+**Response:**
+```json
+{
+  "path": "config.json",
+  "size": 1024,
+  "sha256": "abc123..."
 }
 ```
 
 ### Preupload
 
-Prepare for upload (huggingface_hub compatibility).
+Prepare for upload (huggingface_hub compatibility). **Requires `write` permission.**
 
 ```http
 POST /api/models/:repo_id/preupload
-```
-
-**Parameters:**
-- `repo_id` (path) - Repository ID
-
-**Response:**
-```json
-{
-  "repo_id": "user/model-name",
-  "status": "ready"
-}
+Authorization: Bearer <token>
 ```
 
 ### Commit
 
-Commit uploaded files (huggingface_hub compatibility).
+Commit uploaded files (huggingface_hub compatibility). **Requires `write` permission.**
 
 ```http
 POST /api/models/:repo_id/commit
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -250,34 +408,20 @@ Content-Type: application/json
     {
       "path": "config.json",
       "size": 1024,
-      "lfs": false
-    },
-    {
-      "path": "model.safetensors",
-      "size": 500000000,
-      "lfs": true
+      "lfs": false,
+      "sha": "abc123"
     }
   ]
 }
 ```
 
-**Response:**
-```json
-{
-  "id": 1,
-  "repo_id": "user/model-name",
-  "commit_id": "abc123def456",
-  "message": "Add model files",
-  "created_at": "2024-01-01T00:00:00Z"
-}
-```
-
 ### Resolve File
 
-Download a specific file.
+Download a specific file. **Requires authentication.**
 
 ```http
-GET /:repo_id/resolve/:revision/*path
+GET /api/models/:repo_id/resolve/:revision/*path
+Authorization: Bearer <token>
 ```
 
 **Parameters:**
@@ -288,40 +432,96 @@ GET /:repo_id/resolve/:revision/*path
 **Response:**
 - Binary file content
 
-### Resolve File (API)
-
-```http
-GET /api/models/:repo_id/resolve/:revision/*path
-```
-
-Same as above but under API path.
-
 ### Get Raw File
+
+Same as resolve but returns raw file. **Requires authentication.**
 
 ```http
 GET /api/models/:repo_id/raw/:revision/*path
+Authorization: Bearer <token>
 ```
 
-Same as resolve but returns raw file.
+### LFS Batch
+
+Handle LFS batch operations.
+
+```http
+POST /api/repos/:repo_id/lfs/info/lfs/batch
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "operation": "download",
+  "objects": [
+    {"oid": "abc123", "size": 1024}
+  ]
+}
+```
+
+### LFS Upload Object
+
+Upload an LFS object. **Requires `write` permission.**
+
+```http
+PUT /api/repos/:repo_id/lfs/objects/:oid
+Content-Type: application/octet-stream
+```
+
+### LFS Download Object
+
+Download an LFS object.
+
+```http
+GET /api/repos/:repo_id/lfs/objects/:oid
+```
 
 ### LFS Info
 
-Check LFS status (stub - always returns regular files).
+Check LFS status.
 
 ```http
-GET /api/models/:repo_id/info/lfs
+GET /api/models/:repo_id/info/lfs?oid=abc123
 ```
-
-**Parameters:**
-- `repo_id` (path) - Repository ID
 
 **Response:**
 ```json
 {
-  "lfs": false,
-  "size": 0
+  "lfs": true,
+  "size": 1024,
+  "oid": "abc123"
 }
 ```
+
+---
+
+## Datasets Endpoints
+
+Similar to models endpoints but for datasets.
+
+### List Datasets
+
+```http
+GET /api/datasets/
+Authorization: Bearer <token>
+```
+
+### Get Dataset
+
+```http
+GET /api/datasets/:repo_id
+Authorization: Bearer <token>
+```
+
+### Dataset Files
+
+```http
+GET /api/datasets/:repo_id/files
+Authorization: Bearer <token>
+```
+
+---
 
 ## Python CLI
 
@@ -337,27 +537,10 @@ hf-local serve [OPTIONS]
 - `--port`, `-p`: Server port (default: 8080)
 - `--data-dir`, `-d`: Data storage directory (default: ./data)
 - `--log-level`, `-l`: Log level (default: info)
-- `--token`: Authentication token
-- `--auth-token`: Enable token authentication
-- `--auth-hf`: Enable HuggingFace OAuth
-- `--hf-client-id`: HF OAuth client ID
-- `--hf-client-secret`: HF OAuth client secret
-- `--auth-ldap`: Enable LDAP authentication
-- `--ldap-server`: LDAP server address
 
 **Example:**
 ```bash
-# Basic server
 hf-local serve --port 9000 --data-dir ./models --log-level debug
-
-# With token auth
-hf-local serve --token "my-secret" --auth-token
-
-# With OAuth
-hf-local serve --auth-hf --hf-client-id "abc123" --hf-client-secret "xyz789"
-
-# With LDAP
-hf-local serve --auth-ldap --ldap-server "ldap.company.com"
 ```
 
 ### upload
@@ -377,14 +560,7 @@ hf-local upload LOCAL_PATH REPO_ID [OPTIONS]
 
 **Example:**
 ```bash
-# Upload single file
-hf-local upload ./config.json user/my-model
-
-# Upload folder
 hf-local upload ./model-folder user/my-model
-
-# With custom endpoint
-hf-local upload ./model.bin user/my-model --endpoint http://localhost:9000
 ```
 
 ### list-repos
@@ -398,11 +574,6 @@ hf-local list-repos [OPTIONS]
 **Options:**
 - `--endpoint`, `-e`: Server endpoint (default: http://localhost:8080)
 
-**Example:**
-```bash
-hf-local list-repos
-```
-
 ### init
 
 Initialize a new hf-local instance.
@@ -413,11 +584,6 @@ hf-local init [OPTIONS]
 
 **Options:**
 - `--data-dir`, `-d`: Data directory path (default: ./data)
-
-**Example:**
-```bash
-hf-local init --data-dir ./my-storage
-```
 
 ### status
 
@@ -430,40 +596,7 @@ hf-local status [OPTIONS]
 **Options:**
 - `--endpoint`, `-e`: Server endpoint (default: http://localhost:8080)
 
-**Example:**
-```bash
-hf-local status
-```
-
-### login
-
-Login with authentication token.
-
-```bash
-hf-local login [OPTIONS]
-```
-
-**Options:**
-- `--token`, `-t`: Authentication token (required)
-- `--endpoint`, `-e`: Server endpoint (default: http://localhost:8080)
-
-**Example:**
-```bash
-hf-local login --token "my-secret-token"
-```
-
-### logout
-
-Logout and clear stored credentials.
-
-```bash
-hf-local logout
-```
-
-**Example:**
-```bash
-hf-local logout
-```
+---
 
 ## Python Library
 
@@ -477,9 +610,6 @@ from hf_local import set_endpoint
 set_endpoint("http://localhost:8080")
 ```
 
-**Parameters:**
-- `endpoint` (str): Server endpoint URL
-
 ### login
 
 Login with authentication token.
@@ -487,16 +617,10 @@ Login with authentication token.
 ```python
 from hf_local import login
 
-success = login(token="my-secret-token", endpoint="http://localhost:8080")
+success = login(token="your-jwt-or-api-token", endpoint="http://localhost:8080")
 if success:
     print("Logged in")
 ```
-
-**Parameters:**
-- `token` (str): Authentication token
-- `endpoint` (str, default: "http://localhost:8080"): Server endpoint URL
-
-**Returns:** bool - True if login successful
 
 ### logout
 
@@ -507,8 +631,6 @@ from hf_local import logout
 
 logout()
 ```
-
-**Note:** Clears HF_TOKEN environment variable.
 
 ### serve_background
 
@@ -521,12 +643,6 @@ with serve_background(port=8081, data_dir="./test-data"):
     # Your code here
     pass
 ```
-
-**Parameters:**
-- `port` (int, default: 8080): Server port
-- `data_dir` (str, default: "./data"): Data directory
-- `log_level` (str, default: "info"): Log level
-- `timeout` (int, default: 5): Startup timeout in seconds
 
 ### upload_folder
 
@@ -542,11 +658,6 @@ upload_folder(
 )
 ```
 
-**Parameters:**
-- `folder_path` (str): Local folder path
-- `repo_id` (str): Repository ID
-- `endpoint` (str, default: "http://localhost:8080"): Server endpoint
-
 ### HfLocalApi
 
 Thin wrapper around HfApi that forces local endpoint.
@@ -561,17 +672,7 @@ repo = api.create_repo("user/model")
 api.upload_file("config.json", repo_id="user/model")
 ```
 
-**Parameters:**
-- `endpoint` (str, default: "http://localhost:8080"): Server endpoint
-
-**Methods:**
-All HfApi methods are available:
-- `create_repo()`
-- `upload_file()`
-- `upload_folder()`
-- `list_models()`
-- `model_info()`
-- And more...
+---
 
 ## Error Handling
 
@@ -582,6 +683,8 @@ All HfApi methods are available:
 | 200 | Success |
 | 201 | Created |
 | 400 | Bad Request |
+| 401 | Unauthorized (authentication required) |
+| 403 | Forbidden (insufficient permissions) |
 | 404 | Not Found |
 | 500 | Internal Server Error |
 
@@ -593,9 +696,7 @@ All HfApi methods are available:
 }
 ```
 
-## Rate Limiting
-
-Currently, no rate limiting is implemented for local server usage.
+---
 
 ## CORS
 
@@ -608,78 +709,7 @@ Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
 Access-Control-Allow-Headers: Content-Type, Authorization
 ```
 
-## Authentication
-
-hf-local-hub supports multiple authentication methods. All authenticated endpoints require a JWT token in the `Authorization` header:
-
-```http
-Authorization: Bearer <jwt-token>
-```
-
-### Authentication Methods
-
-| Method | Enable Flag | Environment Variable |
-|--------|-------------|---------------------|
-| Token | `-auth-token` | `HF_LOCAL_AUTH_TOKEN=true` |
-| HF OAuth | `-auth-hf` | `HF_LOCAL_AUTH_HF=true` |
-| LDAP | `-auth-ldap` | `HF_LOCAL_AUTH_LDAP=true` |
-
-### Token Authentication
-
-Simple shared secret authentication:
-
-```bash
-# Server
-hf-local serve --token "my-secret" --auth-token
-
-# Client login
-hf-local login --token "my-secret"
-```
-
-### Hugging Face OAuth
-
-OAuth2 flow with Hugging Face:
-
-```bash
-# Server with OAuth
-hf-local serve \
-  --auth-hf \
-  --hf-client-id "your-client-id" \
-  --hf-client-secret "your-client-secret" \
-  --hf-callback-url "http://localhost:8080/auth/hf/callback"
-```
-
-### LDAP
-
-Corporate directory authentication:
-
-```bash
-# Server with LDAP
-hf-local serve \
-  --auth-ldap \
-  --ldap-server "ldap.company.com" \
-  --ldap-port 389 \
-  --ldap-bind-dn "cn=admin,dc=company,dc=com" \
-  --ldap-bind-pass "password" \
-  --ldap-base-dn "ou=users,dc=company,dc=com" \
-  --ldap-filter "(uid=%s)"
-```
-
-### JWT Token
-
-All authentication methods return a JWT token with this structure:
-
-```json
-{
-  "user_id": "username",
-  "username": "Display Name",
-  "provider": "token|hf|ldap",
-  "exp": 1738362000,
-  "iat": 1738275600
-}
-```
-
-Token expiration: 24 hours
+---
 
 ## Data Model
 
@@ -687,49 +717,62 @@ Token expiration: 24 hours
 
 ```typescript
 interface Repo {
-  id: number;
-  repo_id: string;
+  id: string;           // "namespace/name"
+  modelId: string;      // "name"
   namespace: string;
-  name: string;
   type: "model" | "dataset";
   private: boolean;
+  createdAt: string;    // ISO 8601
+}
+```
+
+### User
+
+```typescript
+interface User {
+  id: number;
+  user_id: string;
+  username: string;
+  email: string;
+  provider: "local" | "hf" | "ldap";
+  is_active: boolean;
+  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }
 ```
 
-### Commit
+### API Token
 
 ```typescript
-interface Commit {
+interface APIToken {
   id: number;
-  repo_id: string;
-  commit_id: string;
-  message: string;
+  token: string;        // "hf_xxxx..."
+  name: string;
+  user_id: string;
+  permissions: string;  // JSON: {"read":true,"write":true,...}
+  expires_at: string | null;
+  last_used_at: string | null;
   created_at: string;
 }
 ```
 
-### File Index
+### Token Permissions
 
 ```typescript
-interface FileIndex {
-  id: number;
-  repo_id: string;
-  commit_id: string;
-  path: string;
-  size: number;
-  lfs: boolean;
-  sha256: string;
-  created_at: string;
+interface TokenPermissions {
+  read: boolean;    // Can read repos/files
+  write: boolean;   // Can create/update repos/files
+  delete: boolean;  // Can delete repos/files
+  admin: boolean;   // Can manage users and tokens
 }
 ```
+
+---
 
 ## Compatibility
 
 ### Hugging Face Hub Compatibility
-
-hf-local-hub implements a subset of the Hugging Face Hub API:
 
 | Feature | Status |
 |---------|---------|
@@ -740,10 +783,11 @@ hf-local-hub implements a subset of the Hugging Face Hub API:
 | Download snapshot | ✓ |
 | List models | ✓ |
 | Get model info | ✓ |
-| LFS support | ✓ (stub) |
-| Token auth | ✓ |
-| OAuth | ✓ |
+| LFS support | ✓ |
+| HF OAuth | ✓ |
 | LDAP | ✓ |
+| API Tokens | ✓ |
+| PostgreSQL | ✓ |
 | Git operations | ✗ |
 | Webhooks | ✗ |
 | Discussions | ✗ |

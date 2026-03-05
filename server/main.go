@@ -2,20 +2,21 @@ package main
 
 import (
 	"context"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/Akicou/hf-local-hub/server/api"
 	"github.com/Akicou/hf-local-hub/server/config"
 	"github.com/Akicou/hf-local-hub/server/db"
 	"github.com/Akicou/hf-local-hub/server/middleware"
-	"log"
-	"net/http"
-	"strconv"
-	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -37,9 +38,27 @@ func main() {
 	logger.Info("Starting hf-local-hub server",
 		zap.Int("port", cfg.Port),
 		zap.String("data_dir", cfg.DataDir),
+		zap.String("db_type", cfg.Database.Type),
 	)
 
-	database, err := db.InitDB(cfg.DataDir + "/hf-local.db")
+	// Initialize database based on configuration
+	var database *gorm.DB
+	if cfg.Database.Type == "postgres" {
+		dbCfg := &db.Config{
+			Type:     db.DatabaseTypePostgreSQL,
+			Host:     cfg.Database.Host,
+			Port:     cfg.Database.Port,
+			User:     cfg.Database.User,
+			Password: cfg.Database.Password,
+			Database: cfg.Database.Database,
+			SSLMode:  cfg.Database.SSLMode,
+		}
+		database, err = db.InitDBWithConfig(dbCfg)
+	} else {
+		// Default to SQLite
+		database, err = db.InitDB(cfg.Database.Path)
+	}
+
 	if err != nil {
 		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}

@@ -39,22 +39,24 @@ def find_binary() -> str:
     # Check PATH but verify it's not the Python CLI by checking help output
     path_binary = shutil.which(binary_name)
     if path_binary:
-        # Verify it's the Go binary by checking if it accepts --port flag
+        # Verify it's the Go binary by checking for Go-specific flags
         try:
             result = subprocess.run(
-                [path_binary, "--help"],
+                [path_binary, "-help"],
                 capture_output=True,
                 text=True,
                 timeout=2,
             )
-            # Go binary uses standard flag package which shows "Usage:" with flags
-            if "Usage:" in result.stdout or "Usage:" in result.stderr:
+            # Go binary uses flags like -port, -data-dir, -log-level
+            # Python CLI uses commands like serve, init, list
+            help_output = result.stdout + result.stderr
+            if "-port" in help_output or "-data-dir" in help_output:
                 return path_binary
         except Exception:
             pass
 
     raise FileNotFoundError(
-        f"hf-local Go binary not found. Searched in:\n"
+        "hf-local Go binary not found. Searched in:\n"
         + "\n".join(f"  - {p}" for p in paths)
         + "\nBuild with 'make server' or add Go binary to PATH.",
     )
@@ -277,7 +279,7 @@ def init(data_dir: str = typer.Option("./data", "--data-dir", "-d", help="Data d
         dir_path.mkdir(parents=True, exist_ok=True)
         console.print(f"[dim]Created: {dir_path}[/dim]")
 
-    console.print("[green]✓ hf-local initialized successfully[/green]")
+    console.print("[green][OK] hf-local initialized successfully[/green]")
     console.print(f"[dim]Start server with: hf-local serve --data-dir {data_dir}[/dim]")
 
 

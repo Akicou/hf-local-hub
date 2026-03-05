@@ -140,16 +140,56 @@ func (p *HFProvider) Callback(c *gin.Context) {
 		return
 	}
 
-	jwtToken, err := p.auth.GenerateToken(userInfo["sub"].(string), userInfo["name"].(string), "hf")
+	userID := userInfo["sub"].(string)
+	username := userInfo["name"].(string)
+
+	// Create or update user in database
+	p.ensureUserExists(userID, username, userInfo["email"].(string), "hf")
+
+	jwtToken, err := p.auth.GenerateToken(userID, username, "hf")
 	if err != nil {
 		p.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	p.logger.Info("User logged in via HF OAuth", zap.String("user_id", userInfo["sub"].(string)))
+	p.logger.Info("User logged in via HF OAuth", zap.String("user_id", userID))
 
 	c.JSON(http.StatusOK, gin.H{"token": jwtToken, "user": userInfo})
+}
+
+// ensureUserExists creates a user record if it doesn't exist
+func (p *HFProvider) ensureUserExists(userID, username, email, provider string) {
+	var user db.User
+	if err := p.db.Where("user_id = ?", userID).First(&user).Error; err != nil {
+		// User doesn't exist, create one
+		user = db.User{
+			UserID:   userID,
+			Username: username,
+			Email:    email,
+			Provider: provider,
+			IsActive: true,
+		}
+		if err := p.db.Create(&user).Error; err != nil {
+			p.logger.Error("Failed to create user", zap.Error(err))
+		} else {
+			p.logger.Info("Created new user", zap.String("user_id", userID), zap.String("provider", provider))
+		}
+	} else {
+		// Update user info if needed
+		needsUpdate := false
+		if user.Username != username {
+			user.Username = username
+			needsUpdate = true
+		}
+		if user.Email != email && email != "" {
+			user.Email = email
+			needsUpdate = true
+		}
+		if needsUpdate {
+			p.db.Save(&user)
+		}
+	}
 }
 
 func (p *HFProvider) getUserInfo(accessToken string) (map[string]interface{}, error) {

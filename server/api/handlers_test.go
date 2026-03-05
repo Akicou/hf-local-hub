@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/Akicou/hf-local-hub/server/auth"
 	"github.com/Akicou/hf-local-hub/server/config"
 	"github.com/Akicou/hf-local-hub/server/db"
 	"github.com/Akicou/hf-local-hub/server/storage"
@@ -29,7 +30,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	dbConn, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_fk=1"), &gorm.Config{})
 	require.NoError(t, err)
 
-	_ = dbConn.AutoMigrate(&db.Repo{}, &db.Commit{}, &db.FileIndex{})
+	// Migrate all models including new ones
+	_ = dbConn.AutoMigrate(&db.Repo{}, &db.Commit{}, &db.FileIndex{}, &db.OAuthState{}, &db.User{}, &db.APIToken{})
 	return dbConn
 }
 
@@ -40,9 +42,12 @@ func setupTestRouter(database *gorm.DB) *gin.Engine {
 	cfg := &config.Config{
 		DataDir: ".",
 		Storage: config.StorageConfig{
-			ModelsPath:  "./models",
+			ModelsPath:   "./models",
 			DatasetsPath: "./datasets",
-			SpacesPath:  "./spaces",
+			SpacesPath:   "./spaces",
+		},
+		Auth: config.AuthConfig{
+			JWTSecret: "test-secret-key",
 		},
 	}
 	logger, _ := zap.NewDevelopment()
@@ -52,23 +57,39 @@ func setupTestRouter(database *gorm.DB) *gin.Engine {
 		db:      database,
 		storage: storage.New(cfg.Storage.ModelsPath, cfg.Storage.DatasetsPath, cfg.Storage.SpacesPath),
 		logger:  logger,
+		auth:    auth.NewMiddleware(cfg.Auth.JWTSecret, database),
 	}
 
 	router.GET("/health", s.Health)
 
+	// Public routes
 	api := router.Group("/api")
 	{
-		api.POST("/repos/create", s.CreateRepo)
 		api.GET("/models", s.ListModels)
 		api.GET("/models/:repo_id", s.GetRepo)
-		api.POST("/models/:repo_id/preupload", s.Preupload)
-		api.POST("/models/:repo_id/commit", s.Commit)
 		api.GET("/models/:repo_id/resolve/:revision/*path", s.ResolveFile)
 		api.GET("/models/:repo_id/raw/:revision/*path", s.ResolveFile)
 		api.GET("/models/:repo_id/info/lfs", s.LFSInfo)
 	}
 
+	// Protected routes with auth middleware
+	protected := router.Group("/api")
+	protected.Use(s.auth.Required())
+	{
+		protected.POST("/repos/create", s.CreateRepo)
+		protected.POST("/models/:repo_id/preupload", s.Preupload)
+		protected.POST("/models/:repo_id/commit", s.Commit)
+	}
+
 	return router
+}
+
+// generateTestToken creates a test JWT token for authenticated requests
+func generateTestToken(t *testing.T, database *gorm.DB) string {
+	middleware := auth.NewMiddleware("test-secret-key", database)
+	token, err := middleware.GenerateToken("test-user", "Test User", "test")
+	require.NoError(t, err)
+	return token
 }
 
 func TestHealth(t *testing.T) {
@@ -85,33 +106,58 @@ func TestHealth(t *testing.T) {
 func TestCreateRepo(t *testing.T) {
 	dbConn := setupTestDB(t)
 	router := setupTestRouter(dbConn)
+	token := generateTestToken(t, dbConn)
 
 	payload := map[string]interface{}{
 		"repo_id":    "user/test-model",
-		"namespace":   "user",
-		"name":        "test-model",
-		"type":        "model",
-		"private":     false,
+		"namespace":  "user",
+		"name":       "test-model",
+		"type":       "model",
+		"private":    false,
 	}
 
 	body, _ := json.Marshal(payload)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/repos/create", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	var repo db.Repo
-	err := json.Unmarshal(w.Body.Bytes(), &repo)
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "user/test-model", repo.RepoID)
-	assert.Equal(t, "user", repo.Namespace)
-	assert.Equal(t, "test-model", repo.Name)
-	assert.Equal(t, "model", repo.Type)
-	assert.Equal(t, false, repo.Private)
+	assert.Equal(t, "user/test-model", response["repo_id"])
+	assert.Equal(t, "user", response["namespace"])
+	assert.Equal(t, "test-model", response["name"])
+	assert.Equal(t, "model", response["type"])
+	assert.Equal(t, false, response["private"])
+}
+
+func TestCreateRepoUnauthorized(t *testing.T) {
+	dbConn := setupTestDB(t)
+	router := setupTestRouter(dbConn)
+
+	payload := map[string]interface{}{
+		"repo_id":    "user/test-model",
+		"namespace":  "user",
+		"name":       "test-model",
+		"type":       "model",
+		"private":    false,
+	}
+
+	body, _ := json.Marshal(payload)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/repos/create", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	// No auth header
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestListModels(t *testing.T) {
@@ -200,4 +246,43 @@ func TestLFSInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, false, response["lfs"])
+}
+
+func TestAPITokenAuthentication(t *testing.T) {
+	dbConn := setupTestDB(t)
+	router := setupTestRouter(dbConn)
+
+	// Create a test user
+	user := db.User{
+		UserID:   "test-user",
+		Username: "Test User",
+		Provider: "test",
+		IsActive: true,
+	}
+	dbConn.Create(&user)
+
+	// Create an API token with write permission
+	middleware := auth.NewMiddleware("test-secret-key", dbConn)
+	perms := db.TokenPermissions{Read: true, Write: true, Delete: false, Admin: false}
+	apiToken, err := middleware.GenerateAPIToken("test-user", "Test Token", perms, nil)
+	require.NoError(t, err)
+
+	// Test using the API token to create a repo
+	payload := map[string]interface{}{
+		"repo_id":    "test-user/api-token-repo",
+		"namespace":  "test-user",
+		"name":       "api-token-repo",
+		"type":       "model",
+		"private":    false,
+	}
+
+	body, _ := json.Marshal(payload)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/repos/create", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiToken.Token)
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
 }

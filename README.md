@@ -13,6 +13,9 @@ Lightweight local Hugging Face Hub server and client - run HF Hub entirely on yo
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+- [Database Configuration](#database-configuration)
+- [Authentication](#authentication)
+- [API Tokens](#api-tokens)
 - [Documentation](#documentation)
 - [Examples](#examples)
 - [Architecture](#architecture)
@@ -29,6 +32,8 @@ Lightweight local Hugging Face Hub server and client - run HF Hub entirely on yo
 - **Local Storage**: All models and datasets stored on your filesystem
 - **Cross-Platform**: Linux, macOS, Windows
 - **Docker Support**: Multi-stage Docker image
+- **PostgreSQL Support**: Use SQLite (default) or PostgreSQL for production
+- **API Token Management**: Create and manage API tokens with fine-grained permissions
 - **Comprehensive Testing**: Unit and integration tests
 
 ## Quick Start
@@ -86,44 +91,75 @@ model = AutoModel.from_pretrained('user/my-model')
 "
 ```
 
+## Database Configuration
+
+HF Local Hub supports both SQLite (default) and PostgreSQL.
+
+### SQLite (Default)
+
+No configuration needed - SQLite database is automatically created at `{data_dir}/hf-local.db`.
+
+### PostgreSQL
+
+For production deployments, PostgreSQL is recommended:
+
+**Via CLI:**
+```bash
+./hf-local \
+  -db-type postgres \
+  -db-host localhost \
+  -db-port 5432 \
+  -db-user postgres \
+  -db-password your-password \
+  -db-name hf_local_hub
+```
+
+**Via Environment Variables:**
+```bash
+export HF_LOCAL_DB_TYPE=postgres
+export HF_LOCAL_DB_HOST=localhost
+export HF_LOCAL_DB_PORT=5432
+export HF_LOCAL_DB_USER=postgres
+export HF_LOCAL_DB_PASSWORD=your-password
+export HF_LOCAL_DB_NAME=hf_local_hub
+```
+
+**Via Docker Compose:**
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: hf_local_hub
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your-password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  hf-local:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      HF_LOCAL_DB_TYPE: postgres
+      HF_LOCAL_DB_HOST: postgres
+      HF_LOCAL_DB_PORT: 5432
+      HF_LOCAL_DB_USER: postgres
+      HF_LOCAL_DB_PASSWORD: your-password
+      HF_LOCAL_DB_NAME: hf_local_hub
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+```
+
 ## Authentication
 
-HF Local Hub supports three authentication methods:
+HF Local Hub requires authentication for all API operations. Users must log in before accessing the API.
 
-### 1. Token Authentication (Simple)
-
-The simplest method - use a shared secret token.
-
-**Enable via CLI:**
-```bash
-./hf-local -token "your-secret-token" -auth-token
-```
-
-**Enable via Environment Variables:**
-```bash
-export HF_LOCAL_TOKEN="your-secret-token"
-export HF_LOCAL_AUTH_TOKEN="true"
-```
-
-**Using with the UI:**
-Click "Login" and enter your token when prompted.
-
-**Using with CLI/Python:**
-```bash
-export HF_ENDPOINT=http://localhost:8080
-export HF_TOKEN="your-secret-token"
-huggingface-cli download user/my-model
-```
-
-**How it works:**
-- Client sends token to `/api/auth/login`
-- Server validates the token against the configured secret
-- Server returns a JWT token (valid for 24 hours)
-- Client includes JWT in `Authorization: Bearer <token>` header for subsequent requests
-
----
-
-### 2. Hugging Face OAuth
+### 1. Hugging Face OAuth
 
 Authenticates users through Hugging Face's OAuth2 flow.
 
@@ -149,9 +185,6 @@ export HF_LOCAL_HF_CLIENT_SECRET="your-client-secret"
 export HF_LOCAL_HF_CALLBACK_URL="http://localhost:8080/auth/hf/callback"
 ```
 
-**Using with the UI:**
-The UI's "Login" button will redirect to Hugging Face's authorization page.
-
 **How it works:**
 1. User clicks "Login" → redirect to `https://huggingface.co/oauth/authorize`
 2. User approves the application on Hugging Face
@@ -167,7 +200,7 @@ The UI's "Login" button will redirect to Hugging Face's authorization page.
 
 ---
 
-### 3. LDAP Authentication
+### 2. LDAP Authentication
 
 Authenticate against your corporate LDAP/Active Directory server.
 
@@ -194,9 +227,6 @@ export HF_LOCAL_LDAP_BASE_DN="ou=users,dc=company,dc=com"
 export HF_LOCAL_LDAP_FILTER="(uid=%s)"
 ```
 
-**Using with the UI:**
-Currently, LDAP login requires the token endpoint. Set up a simple token auth proxy or use CLI tools.
-
 **LDAP Configuration Options:**
 - `ldap-server`: LDAP server hostname or IP
 - `ldap-port`: LDAP port (389 for unencrypted, 636 for LDAPS)
@@ -208,17 +238,80 @@ Currently, LDAP login requires the token endpoint. Set up a simple token auth pr
   - For email-based: `(mail=%s)`
   - For sAMAccountName (AD): `(sAMAccountName=%s)`
 
-**How it works:**
-1. Server binds to LDAP using service account credentials
-2. Server searches for user using the configured filter
-3. Server attempts to bind using user DN and provided password
-4. If successful, server generates JWT token with user attributes
-5. User can retrieve email, display name, etc. from LDAP attributes
+---
 
-**Security Notes:**
-- Use LDAPS (port 636) or StartTLS for production
-- Service account should have read-only access to user directory
-- Store bind credentials securely (use environment variables, not CLI args)
+## API Tokens
+
+Users can create API tokens with specific permissions, similar to Hugging Face's token system. These tokens can be used for programmatic access to the API.
+
+### Creating API Tokens
+
+**Via API:**
+```bash
+# First, authenticate with JWT token
+curl -X POST http://localhost:8080/api/tokens/ \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My API Token",
+    "read": true,
+    "write": true,
+    "delete": false,
+    "admin": false,
+    "expires_in": 720
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": 1,
+  "token": "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "name": "My API Token",
+  "permissions": {
+    "read": true,
+    "write": true,
+    "delete": false,
+    "admin": false
+  },
+  "expires_at": "2026-03-05T12:00:00Z",
+  "created_at": "2026-03-05T00:00:00Z"
+}
+```
+
+### Token Permissions
+
+| Permission | Description |
+|------------|-------------|
+| `read` | Can read repositories and files |
+| `write` | Can create/update repositories and files |
+| `delete` | Can delete repositories and files |
+| `admin` | Can manage users and tokens |
+
+### Using API Tokens
+
+```bash
+# Use token like Hugging Face token
+export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export HF_ENDPOINT=http://localhost:8080
+
+# Use with huggingface_hub
+huggingface-cli download user/my-model
+```
+
+### Managing Tokens
+
+**List tokens:**
+```bash
+curl -X GET http://localhost:8080/api/tokens/ \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Delete token:**
+```bash
+curl -X DELETE http://localhost:8080/api/tokens/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
 
 ---
 
@@ -230,7 +323,7 @@ All authentication methods issue JWT tokens with the following structure:
 {
   "user_id": "username-or-uid",
   "username": "Display Name",
-  "provider": "token|hf|ldap",
+  "provider": "hf|ldap",
   "exp": 1738362000,
   "iat": 1738275600
 }
@@ -242,29 +335,13 @@ All authentication methods issue JWT tokens with the following structure:
 
 ---
 
-### Protecting API Endpoints
-
-The server supports two middleware levels:
-
-**Optional Auth** (default):
-- Users can access public repositories without authentication
-- Authenticated users see their private repositories
-- Used for: `GET /api/models`, `GET /api/datasets`, `GET /api/repos/:repo_id`
-
-**Required Auth** (future):
-- Must be authenticated to access
-- Used for: Upload, delete, modify operations (to be added)
-
----
-
 ### Environment Variables Reference
 
 You can also use a `.env` file in the project root or server directory. The server will automatically load it.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `HF_LOCAL_TOKEN` | Shared secret for token auth | `my-secret-key` |
-| `HF_LOCAL_AUTH_TOKEN` | Enable token authentication | `true` |
+| `HF_LOCAL_JWT_SECRET` | JWT signing secret (auto-generated if not set) | `change-me-in-production` |
 | `HF_LOCAL_AUTH_HF` | Enable HF OAuth | `true` |
 | `HF_LOCAL_HF_CLIENT_ID` | HF OAuth client ID | `abc123` |
 | `HF_LOCAL_HF_CLIENT_SECRET` | HF OAuth client secret | `xyz789` |
@@ -276,7 +353,13 @@ You can also use a `.env` file in the project root or server directory. The serv
 | `HF_LOCAL_LDAP_BIND_PASS` | LDAP bind password | `admin-password` |
 | `HF_LOCAL_LDAP_BASE_DN` | LDAP base DN | `ou=users,dc=company,dc=com` |
 | `HF_LOCAL_LDAP_FILTER` | LDAP user search filter | `(uid=%s)` |
-| `HF_LOCAL_JWT_SECRET` | JWT signing secret (defaults to TOKEN) | `change-me-in-production` |
+| `HF_LOCAL_DB_TYPE` | Database type (sqlite or postgres) | `postgres` |
+| `HF_LOCAL_DB_HOST` | PostgreSQL host | `localhost` |
+| `HF_LOCAL_DB_PORT` | PostgreSQL port | `5432` |
+| `HF_LOCAL_DB_USER` | PostgreSQL user | `postgres` |
+| `HF_LOCAL_DB_PASSWORD` | PostgreSQL password | `your-password` |
+| `HF_LOCAL_DB_NAME` | PostgreSQL database name | `hf_local_hub` |
+| `HF_LOCAL_DB_SSLMODE` | PostgreSQL SSL mode | `disable` |
 
 ---
 
@@ -292,7 +375,7 @@ You can also use a `.env` file in the project root or server directory. The serv
 
 ```bash
 # Clone repository
-git clone https://github.com/lyani/hf-local-hub.git
+git clone https://github.com/Akicou/hf-local-hub.git
 cd hf-local-hub
 
 # Build Go server
@@ -335,10 +418,16 @@ See [docs/examples/](docs/examples/) directory for complete examples:
          │ HF_ENDPOINT=http://localhost:8080
          ▼
 ┌─────────────────┐
-│  Go Server      │  (Gin + SQLite)
+│  Go Server      │  (Gin + GORM)
 │  - API Layer    │
 │  - File Serving │
-│  - Auth (opt)   │
+│  - Auth (JWT)   │
+│  - API Tokens   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Database       │  (SQLite or PostgreSQL)
 └────────┬────────┘
          │
          ▼
@@ -353,7 +442,7 @@ See [docs/examples/](docs/examples/) directory for complete examples:
 
 ```bash
 # Clone repository
-git clone https://github.com/lyani/hf-local-hub.git
+git clone https://github.com/Akicou/hf-local-hub.git
 cd hf-local-hub
 
 # Install Python dependencies
@@ -415,56 +504,15 @@ make docker-down
 - [x] Phase 3: Full HF Compatibility
 - [x] Phase 4: Packaging & Documentation
 - [x] Phase 5: CI/CD & GitHub Readiness
+- [x] Phase 6: PostgreSQL Support & API Tokens
 
 ## License
 
 MIT License - see [LICENSE](LICENSE) file
 
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Project Status
-
-- [x] Phase 0: Project Initialization
-- [x] Phase 1: Go Server Core
-- [x] Phase 2: Python Package & CLI
-- [x] Phase 3: Full HF Compatibility
-- [x] Phase 4: Packaging & Documentation
-- [x] Phase 5: CI/CD & GitHub Readiness
-
 ## Current Release
 
-**Version 0.2.0** - March 1, 2026
-
-### Installation
-
-```bash
-# From PyPI
-pip install hf-local-hub
-
-# Or install from source
-git clone https://github.com/Akicou/hf-local-hub.git
-cd hf-local-hub
-make server
-cd python && pip install -e .
-```
-
-### Quick Start
-
-```bash
-# Start server
-hf-local serve --port 8080
-
-# Set HF_ENDPOINT
-export HF_ENDPOINT=http://localhost:8080
-
-# Use with huggingface_hub
-python -c "
-from huggingface_hub import snapshot_download
-snapshot_download('user/my-model')
-"
-```
+**Version 0.2.0** - March 2026
 
 ### What's Included
 
@@ -474,7 +522,9 @@ snapshot_download('user/my-model')
 - ✅ Upload/download workflows
 - ✅ Transformers and Diffusers integration
 - ✅ Docker support
-- ✅ Multiple auth methods (Token, OAuth, LDAP)
+- ✅ OAuth (HF) and LDAP authentication
+- ✅ API token management with permissions
+- ✅ PostgreSQL support
 - ✅ Comprehensive tests
 - ✅ Complete documentation
 
@@ -490,7 +540,6 @@ snapshot_download('user/my-model')
 
 - **GitHub**: https://github.com/Akicou/hf-local-hub
 - **PyPI**: https://pypi.org/project/hf-local-hub/
-- **Docker Hub**: Coming soon
 
 ### Support
 
@@ -507,15 +556,13 @@ Built with:
 
 ## Roadmap
 
-### v0.2.0
-- [x] Authentication and authorization
-- [ ] User management
+### v0.3.0
+- [ ] User management UI
 - [ ] Repository access control
 - [ ] Git operations (branches, tags)
 - [ ] Model metadata search
 
-### v0.3.0
-- [x] Web UI for repository management
+### v0.4.0
 - [ ] Model card editor
 - [ ] File preview
 - [ ] Model sharing features
@@ -524,10 +571,6 @@ Built with:
 ## Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/lyani/hf-local-hub/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/lyani/hf-local-hub/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Akicou/hf-local-hub/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Akicou/hf-local-hub/discussions)
 - **Security**: [SECURITY.md](SECURITY.md)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Akicou/hf-local-hub&type=Date)](https://star-history.com/#lyani/hf-local-hub&Date)

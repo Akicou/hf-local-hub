@@ -6,7 +6,7 @@ import (
 
 // Repo represents a model or dataset repository
 type Repo struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
+	ID        uint      `gorm:"primarykey" json:"-"`
 	RepoID    string    `gorm:"uniqueIndex;not null" json:"id"`       // HfApi expects "id" for repo_id
 	Namespace string    `gorm:"index;not null" json:"namespace"`
 	Name      string    `gorm:"not null" json:"modelId"`              // HfApi expects "modelId" for name
@@ -18,7 +18,6 @@ type Repo struct {
 
 // MarshalJSON customizes JSON output for HfApi compatibility
 func (r Repo) MarshalJSON() ([]byte, error) {
-	type Alias Repo
 	return []byte(`{"id":"` + r.RepoID + `","modelId":"` + r.Name + `","namespace":"` + r.Namespace + `","type":"` + r.Type + `","private":` + boolStr(r.Private) + `,"createdAt":"` + r.CreatedAt.UTC().Format("2006-01-02T15:04:05.000000Z") + `"}`), nil
 }
 
@@ -48,7 +47,7 @@ type FileIndex struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// OAuthState stores OAuth state tokens for CSRF protection
+// OAuthState stores OAuth state tokens for CSRF protection (used by HF OAuth)
 type OAuthState struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	State     string    `gorm:"uniqueIndex;not null" json:"state"`
@@ -61,4 +60,46 @@ type OAuthState struct {
 // IsExpired checks if the OAuth state has expired
 func (s *OAuthState) IsExpired() bool {
 	return time.Now().After(s.ExpiresAt)
+}
+
+// User represents a registered user
+type User struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	UserID       string    `gorm:"uniqueIndex;not null" json:"user_id"`
+	Username     string    `gorm:"not null" json:"username"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"` // Never expose password hash, used for local auth
+	Provider     string    `gorm:"default:'local'" json:"provider"` // local, hf, ldap
+	IsActive     bool      `gorm:"default:true" json:"is_active"`
+	IsAdmin      bool      `gorm:"default:false" json:"is_admin"`
+	CreatedAt    time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt    time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// APIToken represents a user-created API token with permissions
+type APIToken struct {
+	ID          uint       `gorm:"primarykey" json:"id"`
+	Token       string     `gorm:"uniqueIndex;not null" json:"token"`
+	Name        string     `gorm:"not null" json:"name"`
+	UserID      string     `gorm:"index;not null" json:"user_id"`
+	Permissions string     `json:"permissions"` // JSON string of permissions
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
+}
+
+// TokenPermissions defines the structure for API token permissions
+type TokenPermissions struct {
+	Read   bool `json:"read"`   // Can read repos/files
+	Write  bool `json:"write"`  // Can create/update repos/files
+	Delete bool `json:"delete"` // Can delete repos/files
+	Admin  bool `json:"admin"`  // Can manage users and tokens
+}
+
+// IsExpired checks if the API token has expired
+func (t *APIToken) IsExpired() bool {
+	if t.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*t.ExpiresAt)
 }
