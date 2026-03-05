@@ -129,11 +129,13 @@ func (s *Server) LDAPLogin(c *gin.Context) {
 
 func (s *Server) CreateRepo(c *gin.Context) {
 	var req struct {
-		RepoID    string `json:"repo_id" binding:"required"`
-		Namespace string `json:"namespace" binding:"required"`
-		Name      string `json:"name" binding:"required"`
-		Type      string `json:"type"`
-		Private   bool   `json:"private"`
+		RepoID       string `json:"repo_id"`
+		Name         string `json:"name"`
+		Namespace    string `json:"namespace"`
+		Organization string `json:"organization"` // HfApi alternative field
+		Type         string `json:"type"`
+		RepoType     string `json:"repo_type"` // HfApi alternative field
+		Private      bool   `json:"private"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -141,14 +143,49 @@ func (s *Server) CreateRepo(c *gin.Context) {
 		return
 	}
 
+	// Determine repo type (HfApi uses repo_type, we use type)
+	if req.Type == "" {
+		req.Type = req.RepoType
+	}
 	if req.Type == "" {
 		req.Type = "model"
 	}
 
-	parts := strings.Split(req.RepoID, "/")
-	if len(parts) == 2 {
-		req.Namespace = parts[0]
-		req.Name = parts[1]
+	// Handle HfApi format: organization instead of namespace
+	if req.Namespace == "" && req.Organization != "" {
+		req.Namespace = req.Organization
+	}
+
+	// Extract namespace and name from repo_id if not provided
+	if req.RepoID != "" && (req.Namespace == "" || req.Name == "") {
+		parts := strings.Split(req.RepoID, "/")
+		if len(parts) == 2 {
+			if req.Namespace == "" {
+				req.Namespace = parts[0]
+			}
+			if req.Name == "" {
+				req.Name = parts[1]
+			}
+		} else if len(parts) == 1 {
+			// Just a name, use "user" as default namespace
+			if req.Name == "" {
+				req.Name = parts[0]
+			}
+			if req.Namespace == "" {
+				req.Namespace = "user"
+			}
+		}
+	}
+
+	// Validate we have all required fields
+	if req.Namespace == "" || req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "namespace and name are required (provide repo_id as 'namespace/name' or provide separately)"})
+		return
+	}
+
+	// Ensure repo_id is set
+	if req.RepoID == "" {
+		req.RepoID = req.Namespace + "/" + req.Name
 	}
 
 	repo := db.Repo{
@@ -170,7 +207,16 @@ func (s *Server) CreateRepo(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, repo)
+	c.JSON(http.StatusCreated, gin.H{
+		"id":         repo.ID,
+		"repo_id":    repo.RepoID,
+		"namespace":  repo.Namespace,
+		"name":       repo.Name,
+		"type":       repo.Type,
+		"private":    repo.Private,
+		"created_at": repo.CreatedAt,
+		"url":        fmt.Sprintf("http://localhost:%d/api/models/%s", s.cfg.Port, repo.RepoID),
+	})
 }
 
 func (s *Server) ListRepos(c *gin.Context) {
